@@ -52,6 +52,91 @@ describe("profile bio entities", () => {
 		);
 	});
 
+	it("extracts profile URL entities and affiliation hints while deduplicating", () => {
+		expect(
+			extractProfileBioEntities({
+				id: "profile_user_42",
+				handle: "aditya",
+				displayName: "Aditya",
+				bio: "Working on @ab and @useblacksmith with Blacksmith",
+				followersCount: 100,
+				avatarHue: 10,
+				url: "not a url",
+				entities: {
+					url: {
+						urls: "not-array",
+					},
+					description: {
+						urls: [{ expandedUrl: "https://jobs.blacksmith.sh" }],
+					},
+				},
+				affiliations: [
+					{
+						organizationProfileId: "profile_user_999",
+						organizationName: "Blacksmith",
+						organizationHandle: "@useblacksmith",
+						url: "https://x.com/useblacksmith",
+						label: "Blacksmith",
+						source: "bird",
+						isActive: true,
+						firstSeenAt: "2026-05-01T00:00:00.000Z",
+						lastSeenAt: "2026-05-01T00:00:00.000Z",
+					},
+					{
+						organizationProfileId: "profile_user_empty",
+						source: "bird",
+						isActive: true,
+						firstSeenAt: "2026-05-01T00:00:00.000Z",
+						lastSeenAt: "2026-05-01T00:00:00.000Z",
+					},
+				],
+				createdAt: "2026-05-01T00:00:00.000Z",
+			}),
+		).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ kind: "handle", value: "@ab" }),
+				expect.objectContaining({ kind: "handle", value: "@useblacksmith" }),
+				expect.objectContaining({
+					kind: "company_phrase",
+					value: "Blacksmith",
+				}),
+				expect.objectContaining({
+					kind: "domain",
+					value: "jobs.blacksmith.sh",
+				}),
+				expect.objectContaining({
+					kind: "domain",
+					value: "not a url",
+				}),
+			]),
+		);
+
+		expect(
+			extractProfileBioEntities({
+				id: "profile_user_43",
+				handle: "other",
+				displayName: "Other",
+				bio: "",
+				followersCount: 100,
+				avatarHue: 10,
+				entities: {
+					url: {
+						urls: [
+							null,
+							{ expanded_url: "https://www.blacksmith.sh/team" },
+							{ url: "" },
+						],
+					},
+				},
+				createdAt: "2026-05-01T00:00:00.000Z",
+			}),
+		).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ kind: "domain", value: "blacksmith.sh" }),
+			]),
+		);
+	});
+
 	it("syncs current entities and preserves inactive history", () => {
 		const db = getNativeDb();
 		db.prepare(
@@ -96,5 +181,26 @@ describe("profile bio entities", () => {
 				)
 				.get("profile_user_42", "@useblacksmith"),
 		).toEqual({ is_active: 0 });
+	});
+
+	it("returns nothing for missing profiles and ignores malformed entity json", () => {
+		const db = getNativeDb();
+		expect(syncProfileBioEntitiesForProfileId(db, "missing")).toEqual([]);
+		expect(fetchProfileBioEntities(db, [])).toEqual(new Map());
+		db.prepare(
+			`
+      insert into profiles (
+        id, handle, display_name, bio, followers_count, avatar_hue,
+        entities_json, created_at
+      ) values (
+        'profile_user_42', 'aditya', 'Aditya', 'Builder',
+        100, 10, '{bad json', '2026-05-01T00:00:00.000Z'
+      )
+      `,
+		).run();
+
+		expect(syncProfileBioEntitiesForProfileId(db, "profile_user_42")).toEqual(
+			[],
+		);
 	});
 });
