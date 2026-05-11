@@ -142,7 +142,7 @@ function normalizeExpansion(item: {
 	source: string;
 	updatedAt: string;
 }): LinkIndexItem {
-	const target = getTweetTarget(item.finalUrl || item.expandedUrl);
+	const target = getTweetTarget(item.finalUrl);
 	return {
 		shortUrl: item.url,
 		expandedUrl: item.expandedUrl,
@@ -269,7 +269,7 @@ function rebuildOccurrences(
     `)
 						.all() as Array<Record<string, unknown>>);
 		for (const row of dmRows) {
-			const urls = uniqueSourceUrls(String(row.text ?? ""), [], includeAllUrls);
+			const urls = uniqueSourceUrls(String(row.text), [], includeAllUrls);
 			urls.forEach((entry, index) => {
 				insert.run(
 					"dm",
@@ -296,9 +296,9 @@ function rebuildOccurrences(
     `)
 						.all() as Array<Record<string, unknown>>);
 		for (const row of tweetRows) {
-			const entityUrls = toTweetEntityUrls(String(row.entities_json ?? "{}"));
+			const entityUrls = toTweetEntityUrls(String(row.entities_json));
 			const urls = uniqueSourceUrls(
-				String(row.text ?? ""),
+				String(row.text),
 				entityUrls,
 				includeAllUrls,
 			);
@@ -361,25 +361,25 @@ async function expandWithConcurrency(
 			if (!url) {
 				return;
 			}
-			const [result] = await expandUrls([url], {
-				refresh: options.refresh,
-				fetchImpl: options.fetchImpl,
-				timeoutMs: options.timeoutMs,
-			});
-			if (result) {
-				if (result.source === "network") {
-					counts.networkExpansions++;
-				} else {
-					counts.cacheExpansions++;
-				}
-				if (result.status === "miss") {
-					counts.misses++;
-				}
-				if (result.status === "error") {
-					counts.errors++;
-				}
-				upsertExpansion(db, normalizeExpansion(result));
+			const result = (
+				await expandUrls([url], {
+					refresh: options.refresh,
+					fetchImpl: options.fetchImpl,
+					timeoutMs: options.timeoutMs,
+				})
+			)[0]!;
+			if (result.source === "network") {
+				counts.networkExpansions++;
+			} else {
+				counts.cacheExpansions++;
 			}
+			if (result.status === "miss") {
+				counts.misses++;
+			}
+			if (result.status === "error") {
+				counts.errors++;
+			}
+			upsertExpansion(db, normalizeExpansion(result));
 		}
 	}
 
@@ -468,12 +468,12 @@ function toProfile(
 	}
 	return {
 		id: String(row[`${prefix}id`]),
-		handle: String(row[`${prefix}handle`] ?? ""),
-		displayName: String(row[`${prefix}display_name`] ?? ""),
-		bio: String(row[`${prefix}bio`] ?? ""),
-		followersCount: Number(row[`${prefix}followers_count`] ?? 0),
-		followingCount: Number(row[`${prefix}following_count`] ?? 0),
-		avatarHue: Number(row[`${prefix}avatar_hue`] ?? 0),
+		handle: String(row[`${prefix}handle`]),
+		displayName: String(row[`${prefix}display_name`]),
+		bio: String(row[`${prefix}bio`]),
+		followersCount: Number(row[`${prefix}followers_count`]),
+		followingCount: Number(row[`${prefix}following_count`]),
+		avatarHue: Number(row[`${prefix}avatar_hue`]),
 		avatarUrl: getString(row[`${prefix}avatar_url`]),
 		location: getString(row[`${prefix}location`]),
 		url: getString(row[`${prefix}url`]),
@@ -482,7 +482,7 @@ function toProfile(
 			row[`${prefix}entities_json`],
 			{},
 		),
-		createdAt: String(row[`${prefix}created_at`] ?? ""),
+		createdAt: String(row[`${prefix}created_at`]),
 	};
 }
 
@@ -494,14 +494,14 @@ function toLinkedTweet(row: Record<string, unknown>): TimelineItem | null {
 
 	return {
 		id: String(row.linked_id),
-		accountId: String(row.linked_account_id ?? ""),
+		accountId: String(row.linked_account_id),
 		accountHandle: String(row.linked_account_handle ?? ""),
 		kind: String(row.linked_kind) as TimelineItem["kind"],
-		text: String(row.linked_text ?? ""),
-		createdAt: String(row.linked_created_at ?? ""),
+		text: String(row.linked_text),
+		createdAt: String(row.linked_created_at),
 		isReplied: Boolean(row.linked_is_replied),
-		likeCount: Number(row.linked_like_count ?? 0),
-		mediaCount: Number(row.linked_media_count ?? 0),
+		likeCount: Number(row.linked_like_count),
+		mediaCount: Number(row.linked_media_count),
 		bookmarked: Boolean(row.linked_bookmarked),
 		liked: Boolean(row.linked_liked),
 		author,
@@ -536,7 +536,7 @@ function toLinkSearchItem(row: Record<string, unknown>): LinkSearchItem {
 			source: String(row.expansion_source),
 			updatedAt: String(row.updated_at),
 		},
-		sourceText: String(row.source_text ?? ""),
+		sourceText: String(row.source_text),
 		sourceAuthor: toProfile(row, "source_author_"),
 		participant: toProfile(row, "participant_"),
 		linkedTweet: toLinkedTweet(row),

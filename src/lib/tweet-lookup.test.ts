@@ -76,4 +76,14 @@ describe("shared tweet lookup", () => {
 		expect(mocks.lookupTweetsByIdsViaXurl).toHaveBeenCalledWith(["tweet_1"]);
 		expect(mocks.lookupTweetsByIdsViaBird).toHaveBeenCalledWith(["tweet_2"]);
 	});
+
+	it("reports both transport failures in auto mode", async () => {
+		mocks.lookupTweetsByIdsViaXurl.mockRejectedValue("xurl offline");
+		mocks.lookupTweetsByIdsViaBird.mockRejectedValue(new Error("bird offline"));
+		const { lookupTweetsByIds } = await import("./tweet-lookup");
+
+		await expect(lookupTweetsByIds(["tweet_1"])).rejects.toThrow(
+			"Tweet lookup failed via xurl and bird: xurl: xurl offline; bird: bird offline",
+		);
+	});
 });

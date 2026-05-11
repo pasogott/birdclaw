@@ -124,4 +124,48 @@ describe("URL expansion cache", () => {
 		]);
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 	});
+
+	it("returns rich cached metadata and refreshes stale entries", async () => {
+		const { writeSyncCache } = await import("./sync-cache");
+		const { __test__, expandUrls } = await import("./url-expansion");
+		writeSyncCache(__test__.cacheKeyForUrl("https://t.co/card"), {
+			expandedUrl: "https://example.com/card",
+			finalUrl: "https://example.com/card",
+			status: "hit",
+			title: "Card title",
+			description: "Card description",
+		});
+		writeSyncCache(__test__.cacheKeyForUrl("https://t.co/stale"), {
+			expandedUrl: "https://example.com/stale",
+			finalUrl: "https://example.com/stale",
+			status: "hit",
+		});
+		const fetchImpl = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			url: "",
+		});
+
+		await expect(
+			expandUrls(["https://t.co/card"], { fetchImpl }),
+		).resolves.toEqual([
+			expect.objectContaining({
+				title: "Card title",
+				description: "Card description",
+				source: "cache",
+			}),
+		]);
+		await expect(
+			expandUrls(["https://t.co/stale"], {
+				fetchImpl,
+				successMaxAgeMs: -1,
+			}),
+		).resolves.toEqual([
+			expect.objectContaining({
+				finalUrl: "https://t.co/stale",
+				source: "network",
+			}),
+		]);
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
+	});
 });
