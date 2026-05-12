@@ -679,25 +679,40 @@ syncCommand
 syncCommand
 	.command("mention-threads")
 	.description(
-		"Fetch tweet conversation context for recent mentions through bird",
+		"Fetch tweet conversation context for recent mentions through bird or xurl",
 	)
 	.option("--account <accountId>", "Account id")
+	.option("--mode <mode>", "bird or xurl", "bird")
 	.option("--limit <n>", "Recent mentions to inspect", "30")
 	.option("--delay-ms <n>", "Delay between thread fetches", "1500")
 	.option("--timeout-ms <n>", "Per-thread timeout", "15000")
 	.option("--all", "Fetch all retrievable thread pages")
 	.option("--max-pages <n>", "Stop after N pages")
 	.action(async (options) => {
-		const result = await syncMentionThreads({
-			account: options.account,
-			limit: Number(options.limit),
-			delayMs: Number(options.delayMs),
-			timeoutMs: Number(options.timeoutMs),
-			all: Boolean(options.all),
-			maxPages: options.maxPages ? Number(options.maxPages) : undefined,
-		});
-		await autoSyncAfterWrite();
-		print(result, true);
+		try {
+			const result = await syncMentionThreads({
+				account: options.account,
+				mode: options.mode,
+				limit: Number(options.limit),
+				delayMs: Number(options.delayMs),
+				timeoutMs: Number(options.timeoutMs),
+				all: Boolean(options.all),
+				maxPages: options.maxPages ? Number(options.maxPages) : undefined,
+			});
+			await autoSyncAfterWrite();
+			print(result, true);
+		} catch (error) {
+			print(
+				{
+					ok: false,
+					kind: "mention-threads",
+					mode: options.mode ?? "bird",
+					error: errorMessage(error),
+				},
+				true,
+			);
+			process.exitCode = 1;
+		}
 	});
 
 for (const kind of ["likes", "bookmarks"] as const) {

@@ -356,6 +356,42 @@ describe("xurl transport wrapper", () => {
 		]);
 	});
 
+	it("reads conversation search and individual tweets with parent-walk fields", async () => {
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({
+					data: [{ id: "tweet_1", author_id: "42", text: "hello" }],
+					meta: { next_token: "next" },
+				}),
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({
+					data: {
+						id: "tweet_1",
+						author_id: "42",
+						text: "hello",
+						in_reply_to_user_id: "7",
+					},
+				}),
+				stderr: "",
+			});
+		const { getTweetById, searchRecentByConversationId } =
+			await import("./xurl");
+
+		await searchRecentByConversationId("123", {
+			maxResults: 100,
+			paginationToken: "cursor",
+		});
+		await getTweetById("tweet_1");
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(1, "xurl", [
+			`/2/tweets/search/recent?query=conversation_id%3A123&max_results=100&expansions=author_id&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics%2Creferenced_tweets%2Cin_reply_to_user_id&user.fields=${RICH_USER_FIELDS}&pagination_token=cursor`,
+		]);
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(2, "xurl", [
+			`/2/tweets/tweet_1?expansions=author_id&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics%2Creferenced_tweets%2Cin_reply_to_user_id&user.fields=${RICH_USER_FIELDS}`,
+		]);
+	});
+
 	it("lists liked and bookmarked tweets through raw Twitter endpoints", async () => {
 		execFileAsyncMock
 			.mockResolvedValueOnce({

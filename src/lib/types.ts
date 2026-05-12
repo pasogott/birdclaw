@@ -479,6 +479,7 @@ export interface XurlMentionData {
 	text: string;
 	created_at: string;
 	conversation_id?: string;
+	in_reply_to_user_id?: string;
 	entities?: Record<string, unknown>;
 	referenced_tweets?: XurlReferencedTweet[];
 	public_metrics?: XurlPublicMetrics;
@@ -506,6 +507,7 @@ export interface XurlTweetData {
 	text: string;
 	created_at: string;
 	conversation_id?: string;
+	in_reply_to_user_id?: string;
 	entities?: Record<string, unknown>;
 	referenced_tweets?: XurlReferencedTweet[];
 	public_metrics?: XurlPublicMetrics;

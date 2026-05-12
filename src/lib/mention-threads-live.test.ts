@@ -9,10 +9,17 @@ import { listTimelineItems } from "./queries";
 
 const mocks = vi.hoisted(() => ({
 	listThreadViaBird: vi.fn(),
+	searchRecentByConversationId: vi.fn(),
+	getTweetById: vi.fn(),
 }));
 
 vi.mock("./bird", () => ({
 	listThreadViaBird: mocks.listThreadViaBird,
+}));
+
+vi.mock("./xurl", () => ({
+	searchRecentByConversationId: mocks.searchRecentByConversationId,
+	getTweetById: mocks.getTweetById,
 }));
 
 const tempRoots: string[] = [];
@@ -24,7 +31,9 @@ function setupTempHome() {
 	resetBirdclawPathsForTests();
 	resetDatabaseForTests();
 	const db = getNativeDb();
-	db.exec("delete from tweets; delete from tweets_fts;");
+	db.exec(
+		"delete from tweet_account_edges; delete from tweets; delete from tweets_fts;",
+	);
 	db.prepare(
 		`
     insert into tweets (
@@ -50,11 +59,34 @@ function insertMention(id: string, text: string, createdAt: string) {
 		.run(id, text, createdAt);
 }
 
+function upsertMentionEdge(
+	id: string,
+	raw: Record<string, unknown>,
+	seenAt = "2026-05-12T10:00:00.000Z",
+) {
+	getNativeDb()
+		.prepare(
+			`
+    insert into tweet_account_edges (
+      account_id, tweet_id, kind, first_seen_at, last_seen_at, seen_count,
+      source, raw_json, updated_at
+    ) values ('acct_primary', ?, 'mention', ?, ?, 1, 'xurl', ?, ?)
+    on conflict(account_id, tweet_id, kind) do update set
+      raw_json = excluded.raw_json,
+      last_seen_at = excluded.last_seen_at,
+      updated_at = excluded.updated_at
+    `,
+		)
+		.run(id, seenAt, seenAt, JSON.stringify(raw), seenAt);
+}
+
 afterEach(() => {
 	resetDatabaseForTests();
 	resetBirdclawPathsForTests();
 	delete process.env.BIRDCLAW_HOME;
 	mocks.listThreadViaBird.mockReset();
+	mocks.searchRecentByConversationId.mockReset();
+	mocks.getTweetById.mockReset();
 	for (const tempRoot of tempRoots.splice(0)) {
 		rmSync(tempRoot, { recursive: true, force: true });
 	}
@@ -222,6 +254,249 @@ describe("mention thread sync", () => {
 		});
 	});
 
+	it("fetches xurl conversation search results and writes thread context edges", async () => {
+		setupTempHome();
+		insertMention(
+			"mention_recent",
+			"recent mention",
+			"2026-05-12T10:00:00.000Z",
+		);
+		upsertMentionEdge("mention_recent", {
+			id: "mention_recent",
+			author_id: "42",
+			text: "recent mention",
+			created_at: "2026-05-12T10:00:00.000Z",
+			conversation_id: "root_recent",
+		});
+		const payload = {
+			data: [
+				{
+					id: "root_recent",
+					author_id: "25401953",
+					text: "root post",
+					created_at: "2026-05-12T09:58:00.000Z",
+					conversation_id: "root_recent",
+					public_metrics: { like_count: 4 },
+				},
+				{
+					id: "mention_recent",
+					author_id: "42",
+					text: "recent mention",
+					created_at: "2026-05-12T10:00:00.000Z",
+					conversation_id: "root_recent",
+					referenced_tweets: [{ type: "replied_to", id: "root_recent" }],
+					in_reply_to_user_id: "25401953",
+				},
+			],
+			includes: {
+				users: [
+					{ id: "25401953", username: "steipete", name: "Peter" },
+					{ id: "42", username: "sam", name: "Sam" },
+				],
+			},
+			meta: { result_count: 2 },
+		};
+		mocks.searchRecentByConversationId
+			.mockResolvedValueOnce(payload)
+			.mockResolvedValueOnce(payload);
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			mode: "xurl",
+			limit: 1,
+			delayMs: 0,
+		});
+		const db = getNativeDb();
+		const edges = db
+			.prepare(
+				"select tweet_id, kind, source from tweet_account_edges where kind = 'thread_context' order by tweet_id",
+			)
+			.all();
+		const root = db
+			.prepare("select kind from tweets where id = ?")
+			.get("root_recent");
+
+		expect(result).toMatchObject({
+			ok: true,
+			source: "xurl",
+			mentions: 1,
+			succeeded: 1,
+			failed: 0,
+			mergedTweets: 2,
+			uniqueTweets: 2,
+			generalReadTweets: 2,
+			results: [
+				expect.objectContaining({
+					tweetId: "mention_recent",
+					conversationId: "root_recent",
+					strategy: "conversation_search",
+					count: 2,
+					pages: 1,
+				}),
+			],
+		});
+		expect(mocks.searchRecentByConversationId).toHaveBeenCalledWith(
+			"root_recent",
+			{ maxResults: 100, paginationToken: undefined },
+		);
+		expect(mocks.getTweetById).not.toHaveBeenCalled();
+		expect(edges).toEqual([
+			{ tweet_id: "mention_recent", kind: "thread_context", source: "xurl" },
+			{ tweet_id: "root_recent", kind: "thread_context", source: "xurl" },
+		]);
+		expect(root).toEqual({ kind: "thread" });
+
+		await syncMentionThreads({ mode: "xurl", limit: 1, delayMs: 0 });
+		const edgeCount = db
+			.prepare(
+				"select count(*) as count from tweet_account_edges where kind = 'thread_context'",
+			)
+			.get() as { count: number };
+		expect(edgeCount.count).toBe(2);
+	});
+
+	it("falls back to walking the xurl parent chain for older conversations", async () => {
+		setupTempHome();
+		insertMention("mention_old", "old mention", "2026-05-05T11:00:00.000Z");
+		upsertMentionEdge("mention_old", {
+			id: "mention_old",
+			author_id: "42",
+			text: "old mention",
+			created_at: "2026-05-05T11:00:00.000Z",
+			conversation_id: "root_old",
+			referenced_tweets: [{ type: "replied_to", id: "parent_old" }],
+		});
+		mocks.searchRecentByConversationId.mockResolvedValueOnce({
+			data: [],
+			meta: { result_count: 0 },
+		});
+		mocks.getTweetById
+			.mockResolvedValueOnce({
+				data: [
+					{
+						id: "parent_old",
+						author_id: "43",
+						text: "parent post",
+						created_at: "2026-05-01T09:55:00.000Z",
+						conversation_id: "root_old",
+						referenced_tweets: [{ type: "replied_to", id: "root_old" }],
+						in_reply_to_user_id: "25401953",
+					},
+				],
+				includes: { users: [{ id: "43", username: "alex", name: "Alex" }] },
+			})
+			.mockResolvedValueOnce({
+				data: [
+					{
+						id: "root_old",
+						author_id: "25401953",
+						text: "root old",
+						created_at: "2026-05-01T09:50:00.000Z",
+						conversation_id: "root_old",
+					},
+				],
+				includes: {
+					users: [{ id: "25401953", username: "steipete", name: "Peter" }],
+				},
+			});
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			mode: "xurl",
+			limit: 1,
+			delayMs: 0,
+		});
+		const chainRows = getNativeDb()
+			.prepare(
+				"select id, kind, reply_to_id from tweets where id in (?, ?) order by id",
+			)
+			.all("parent_old", "root_old");
+
+		expect(mocks.searchRecentByConversationId).toHaveBeenCalledWith(
+			"root_old",
+			{ maxResults: 100, paginationToken: undefined },
+		);
+		expect(mocks.getTweetById).toHaveBeenNthCalledWith(1, "parent_old");
+		expect(mocks.getTweetById).toHaveBeenNthCalledWith(2, "root_old");
+		expect(result).toMatchObject({
+			source: "xurl",
+			mergedTweets: 2,
+			generalReadTweets: 2,
+			results: [
+				expect.objectContaining({
+					tweetId: "mention_old",
+					strategy: "parent_walk",
+					fallbackDepth: 2,
+					count: 2,
+				}),
+			],
+		});
+		expect(chainRows).toEqual([
+			{ id: "parent_old", kind: "thread", reply_to_id: "root_old" },
+			{ id: "root_old", kind: "thread", reply_to_id: null },
+		]);
+	});
+
+	it("caps xurl fallback parent walks at twelve hops", async () => {
+		setupTempHome();
+		insertMention("mention_deep", "deep mention", "2026-05-05T11:00:00.000Z");
+		upsertMentionEdge("mention_deep", {
+			id: "mention_deep",
+			author_id: "42",
+			text: "deep mention",
+			created_at: "2026-05-05T11:00:00.000Z",
+			conversation_id: "root_deep",
+			referenced_tweets: [{ type: "replied_to", id: "parent_1" }],
+		});
+		mocks.searchRecentByConversationId.mockResolvedValueOnce({
+			data: [],
+			meta: { result_count: 0 },
+		});
+		for (let index = 1; index <= 12; index += 1) {
+			mocks.getTweetById.mockResolvedValueOnce({
+				data: [
+					{
+						id: `parent_${String(index)}`,
+						author_id: "42",
+						text: `parent ${String(index)}`,
+						created_at: "2026-05-01T09:00:00.000Z",
+						conversation_id: "root_deep",
+						referenced_tweets: [
+							{ type: "replied_to", id: `parent_${String(index + 1)}` },
+						],
+						in_reply_to_user_id: "43",
+					},
+				],
+			});
+		}
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			mode: "xurl",
+			limit: 1,
+			delayMs: 0,
+		});
+
+		expect(mocks.getTweetById).toHaveBeenCalledTimes(12);
+		expect(mocks.getTweetById).not.toHaveBeenCalledWith("parent_13");
+		expect(result).toMatchObject({
+			warnings: expect.arrayContaining([
+				"fallback parent-chain depth cap reached for mention_deep after 12 hops",
+			]),
+			results: [
+				expect.objectContaining({
+					tweetId: "mention_deep",
+					strategy: "parent_walk",
+					fallbackDepth: 12,
+					count: 12,
+					warnings: expect.arrayContaining([
+						"fallback parent-chain depth cap reached for mention_deep after 12 hops",
+					]),
+				}),
+			],
+		});
+	});
+
 	it("validates mention thread sync options", async () => {
 		setupTempHome();
 		const { syncMentionThreads } = await import("./mention-threads-live");
@@ -237,6 +512,9 @@ describe("mention thread sync", () => {
 		);
 		await expect(syncMentionThreads({ maxPages: -1 })).rejects.toThrow(
 			"--max-pages must be non-negative",
+		);
+		await expect(syncMentionThreads({ mode: "auto" })).rejects.toThrow(
+			"--mode must be bird or xurl",
 		);
 		await expect(syncMentionThreads({ account: "missing" })).rejects.toThrow(
 			"Unknown account: missing",

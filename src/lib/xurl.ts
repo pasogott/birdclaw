@@ -14,6 +14,10 @@ const execFileAsync = promisify(execFile);
 const TRANSPORT_STATUS_TTL_MS = 5 * 60_000;
 const AUTHENTICATED_USER_TTL_MS = 60_000;
 const JSON_RETRY_LIMIT = 6;
+const RICH_USER_FIELDS =
+	"description,entities,location,public_metrics,profile_image_url,url,created_at,verified,verified_type";
+const THREAD_TWEET_FIELDS =
+	"created_at,conversation_id,entities,public_metrics,referenced_tweets,in_reply_to_user_id";
 
 let transportStatusCache:
 	| {
@@ -616,6 +620,75 @@ export async function lookupTweetsByIds(
 		data: Array.isArray(payload.data)
 			? (payload.data as XurlTweetsResponse["data"])
 			: [],
+		includes:
+			payload.includes && typeof payload.includes === "object"
+				? (payload.includes as XurlTweetsResponse["includes"])
+				: undefined,
+		meta:
+			payload.meta && typeof payload.meta === "object"
+				? (payload.meta as XurlTweetsResponse["meta"])
+				: undefined,
+	};
+}
+
+export async function searchRecentByConversationId(
+	conversationId: string,
+	{
+		maxResults,
+		paginationToken,
+	}: {
+		maxResults: number;
+		paginationToken?: string;
+	},
+): Promise<XurlTweetsResponse> {
+	const query = new URLSearchParams({
+		query: `conversation_id:${conversationId}`,
+		max_results: String(maxResults),
+		expansions: "author_id",
+		"tweet.fields": THREAD_TWEET_FIELDS,
+		"user.fields": RICH_USER_FIELDS,
+	});
+	if (paginationToken) {
+		query.set("pagination_token", paginationToken);
+	}
+
+	const payload = await runJsonCommand([
+		`/2/tweets/search/recent?${query.toString()}`,
+	]);
+	return {
+		data: Array.isArray(payload.data)
+			? (payload.data as XurlTweetsResponse["data"])
+			: [],
+		includes:
+			payload.includes && typeof payload.includes === "object"
+				? (payload.includes as XurlTweetsResponse["includes"])
+				: undefined,
+		meta:
+			payload.meta && typeof payload.meta === "object"
+				? (payload.meta as XurlTweetsResponse["meta"])
+				: undefined,
+	};
+}
+
+export async function getTweetById(id: string): Promise<XurlTweetsResponse> {
+	const query = new URLSearchParams({
+		expansions: "author_id",
+		"tweet.fields": THREAD_TWEET_FIELDS,
+		"user.fields": RICH_USER_FIELDS,
+	});
+
+	const payload = await runJsonCommand([`/2/tweets/${id}?${query.toString()}`]);
+	const data =
+		payload.data &&
+		typeof payload.data === "object" &&
+		!Array.isArray(payload.data)
+			? [payload.data as XurlTweetsResponse["data"][number]]
+			: Array.isArray(payload.data)
+				? (payload.data as XurlTweetsResponse["data"])
+				: [];
+
+	return {
+		data,
 		includes:
 			payload.includes && typeof payload.includes === "object"
 				? (payload.includes as XurlTweetsResponse["includes"])
