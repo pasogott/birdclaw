@@ -207,7 +207,7 @@ pnpm cli search tweets --liked --limit 20 --json
 pnpm cli search tweets --bookmarked --limit 20 --json
 ```
 
-### Sync likes, bookmarks, and home timeline
+### Sync likes, bookmarks, home timeline, and mentions
 
 `auto` tries `xurl` first for likes/bookmarks, then falls back to `bird`. Use `bird` directly when the API path is unavailable for the account/token you have locally.
 
@@ -286,7 +286,7 @@ Notes:
 - `actions.transport` accepts `auto`, `bird`, or `xurl`
 - `bird` mode uses your local `bird` CLI and caches its mentions output into birdclaw's canonical store
 - filters still work in `xurl` mode; filtered payloads are rebuilt from the local canonical store after sync
-- `sync likes`, `sync bookmarks`, `sync timeline`, and `sync mention-threads` store live results in the canonical local store; per-account home/mention/like/bookmark membership is kept as edges so shared tweets do not clobber account ownership
+- `sync mentions`, `sync mention-threads`, `sync likes`, `sync bookmarks`, and `sync timeline` store live results in the canonical local store; per-account home/mention/like/bookmark membership is kept as edges so shared tweets do not clobber account ownership
 
 ### Research bookmarks and threads
 
