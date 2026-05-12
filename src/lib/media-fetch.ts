@@ -10,6 +10,7 @@ import {
 	existsSync,
 	mkdirSync,
 	readFileSync,
+	readdirSync,
 	statSync,
 } from "node:fs";
 import { copyFile, rename } from "node:fs/promises";
@@ -29,6 +30,7 @@ type Candidate = {
 	url: string;
 	path: string;
 	tmpPath: string;
+	archivePath?: string;
 };
 type FetchOneResult = {
 	fetched: number;
@@ -216,6 +218,64 @@ function videoCandidate(
 	};
 }
 
+function archiveTweetDirs(dir: string, tweetId: string) {
+	const archiveRoot = path.join(dir, "archive");
+	try {
+		return readdirSync(archiveRoot, { withFileTypes: true })
+			.filter((entry) => entry.isDirectory())
+			.map((entry) => path.join(archiveRoot, entry.name, tweetId))
+			.filter((tweetDir) => existsSync(tweetDir));
+	} catch {
+		return [];
+	}
+}
+
+function archiveVideoCandidates(
+	item: Record<string, unknown>,
+	dir: string,
+	tweetId: string,
+) {
+	const rawType = String(item.type ?? "");
+	const kind: MediaKind | null =
+		rawType === "video"
+			? "video"
+			: rawType === "animated_gif" || rawType === "gif"
+				? "gif"
+				: null;
+	if (!kind) return [];
+
+	const candidates: Candidate[] = [];
+	for (const tweetDir of archiveTweetDirs(dir, tweetId)) {
+		let entries;
+		try {
+			entries = readdirSync(tweetDir, { withFileTypes: true });
+		} catch {
+			continue;
+		}
+		for (const entry of entries) {
+			const ext = path.extname(entry.name).toLowerCase();
+			if (!entry.isFile() || ext !== ".mp4") continue;
+			const archivePath = path.join(tweetDir, entry.name);
+			const prefix = `${tweetId}-`;
+			const rawKey = path.basename(entry.name, ext);
+			const mediaKey = rawKey.startsWith(prefix)
+				? rawKey.slice(prefix.length)
+				: rawKey;
+			if (!mediaKey) continue;
+			candidates.push({
+				kind,
+				mediaKey,
+				tweetId,
+				url: `archive:${archivePath}`,
+				path: path.join(dir, `${mediaKey}${ext}`),
+				tmpPath: path.join(dir, `${mediaKey}.tmp`),
+				archivePath,
+			});
+		}
+	}
+	return candidates;
+}
+
 function rowCandidates(row: Row, dir: string, includeVideo: boolean) {
 	let items: unknown;
 	try {
@@ -235,7 +295,11 @@ function rowCandidates(row: Row, dir: string, includeVideo: boolean) {
 		}
 		if (includeVideo) {
 			const video = videoCandidate(item, dir, row.id);
-			if (video) candidates.push(video);
+			if (video) {
+				candidates.push(video);
+			} else {
+				candidates.push(...archiveVideoCandidates(item, dir, row.id));
+			}
 		}
 	}
 	return candidates;
@@ -312,6 +376,7 @@ function fail(
 }
 
 function archivePathFor(item: Candidate, mediaOriginalsDir: string) {
+	if (item.archivePath) return item.archivePath;
 	if (!item.tweetId || !item.mediaKey) return null;
 	const ext = path.extname(item.path);
 	if (!ext) return null;

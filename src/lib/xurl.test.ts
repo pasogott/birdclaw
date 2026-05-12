@@ -18,7 +18,7 @@ const FOLLOW_USER_FIELDS =
 const AUTHOR_MEDIA_EXPANSIONS = "author_id%2Cattachments.media_keys";
 const MEDIA_EXPANSION = "attachments.media_keys";
 const MEDIA_FIELDS =
-	"variants%2Cpreview_image_url%2Cduration_ms%2Calt_text%2Ctype%2Cwidth%2Cheight%2Cpublic_metrics";
+	"variants%2Cpreview_image_url%2Curl%2Cduration_ms%2Calt_text%2Ctype%2Cwidth%2Cheight%2Cpublic_metrics";
 const PHOTO_MEDIA = {
 	media_key: "photo_1",
 	type: "photo",

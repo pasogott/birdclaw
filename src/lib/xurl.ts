@@ -17,7 +17,7 @@ const JSON_RETRY_LIMIT = 6;
 const MEDIA_EXPANSION = "attachments.media_keys";
 const AUTHOR_MEDIA_EXPANSIONS = `author_id,${MEDIA_EXPANSION}`;
 const MEDIA_FIELDS =
-	"variants,preview_image_url,duration_ms,alt_text,type,width,height,public_metrics";
+	"variants,preview_image_url,url,duration_ms,alt_text,type,width,height,public_metrics";
 
 let transportStatusCache:
 	| {

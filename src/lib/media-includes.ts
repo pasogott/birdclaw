@@ -56,12 +56,51 @@ function mp4Variants(
 		);
 }
 
+function record(value: unknown) {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: null;
+}
+
+function entityMediaUrl(value: Record<string, unknown>) {
+	for (const key of ["media_url_https", "media_url", "url", "expanded_url"]) {
+		if (typeof value[key] === "string" && value[key].length > 0) {
+			return value[key];
+		}
+	}
+
+	const images = Array.isArray(value.images) ? value.images : [];
+	for (const image of images) {
+		const item = record(image);
+		if (typeof item?.url === "string" && item.url.length > 0) {
+			return item.url;
+		}
+	}
+	return null;
+}
+
+function birdEntityMedia(tweet: TweetWithMediaAttachments) {
+	const urls = Array.isArray(tweet.entities?.urls) ? tweet.entities.urls : [];
+	const seen = new Set<string>();
+	const items: TweetMediaItem[] = [];
+	for (const url of urls) {
+		const item = record(url);
+		if (!item || typeof item.media_key !== "string") continue;
+		const mediaUrl = entityMediaUrl(item);
+		if (!mediaUrl || seen.has(mediaUrl)) continue;
+		seen.add(mediaUrl);
+		items.push({ url: mediaUrl, type: "image" });
+	}
+	return items;
+}
+
 export function buildMediaJsonFromIncludes(
 	tweet: TweetWithMediaAttachments,
 	media: XurlMediaItem[] = [],
 ) {
 	const byKey = new Map(media.map((item) => [item.media_key, item]));
-	const items = mediaKeys(tweet)
+	const keys = mediaKeys(tweet);
+	const items = keys
 		.map((key) => byKey.get(key))
 		.filter((item): item is XurlMediaItem => item !== undefined)
 		.map((item) => {
@@ -96,5 +135,5 @@ export function buildMediaJsonFromIncludes(
 		})
 		.filter((item): item is TweetMediaItem => item !== null);
 
-	return JSON.stringify(items);
+	return JSON.stringify(keys.length > 0 ? items : birdEntityMedia(tweet));
 }

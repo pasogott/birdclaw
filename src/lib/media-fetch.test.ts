@@ -216,6 +216,37 @@ describe("media fetch", () => {
 		).toEqual(Buffer.from([4, 5]));
 	});
 
+	it("reuses archive mp4 bytes when media_json has no variants", async () => {
+		const root = home();
+		const mediaDir = path.join(root, "media", "originals");
+		mkdirSync(mediaDir, { recursive: true });
+		writeFileSync(path.join(mediaDir, "thumb.jpg"), "cached thumb");
+		const archiveFile = archiveTweetFile(root, "tweet_1", "clip", ".mp4");
+		mkdirSync(path.dirname(archiveFile), { recursive: true });
+		writeFileSync(archiveFile, Buffer.from([6, 7, 8]));
+		insertTweet("tweet_1", [
+			{
+				url: "https://pbs.twimg.com/ext_tw_video_thumb/thumb.jpg",
+				type: "video",
+			},
+		]);
+		const fetchMock = vi.fn(async () => {
+			throw new Error("must not fetch");
+		});
+
+		const result = await fetchTweetMedia({ fetchImpl: fetchMock, pacingMs: 0 });
+
+		expect(result).toMatchObject({
+			videos_fetched: 1,
+			reused_from_archive: 1,
+			skipped_cached: 1,
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(readFileSync(path.join(mediaDir, "clip.mp4"))).toEqual(
+			Buffer.from([6, 7, 8]),
+		);
+	});
+
 	it("backs off and retries once after 429", async () => {
 		const root = home();
 		insertTweet("tweet_1", [pbs("demo")]);
