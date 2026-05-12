@@ -518,7 +518,9 @@ async function writeResponseBody(
 			createWriteStream(tmpPath, { flags: append ? "a" : "w" }),
 		);
 	} catch (error) {
-		await rm(tmpPath, { force: true });
+		if (error instanceof Error && error.message === "max-bytes") {
+			await rm(tmpPath, { force: true });
+		}
 		throw error;
 	}
 	return bytes;

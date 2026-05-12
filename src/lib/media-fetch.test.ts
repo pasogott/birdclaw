@@ -70,6 +70,15 @@ function mp4(name: string, bitrate = 832000) {
 	};
 }
 
+function failingStream(bytes: Uint8Array, error: Error) {
+	return new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.enqueue(bytes);
+			setTimeout(() => controller.error(error), 10);
+		},
+	});
+}
+
 afterEach(() => {
 	resetDatabaseForTests();
 	resetBirdclawPathsForTests();
@@ -564,6 +573,53 @@ describe("media fetch", () => {
 		});
 		expect(existsSync(path.join(mediaDir, "chunked.tmp"))).toBe(false);
 		expect(existsSync(path.join(mediaDir, "chunked.mp4"))).toBe(false);
+	});
+
+	it("preserves tmp files after transient stream errors for later range resume", async () => {
+		const root = home();
+		insertTweet("tweet_1", [{ type: "video", variants: [mp4("flaky")] }]);
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					failingStream(new Uint8Array([1, 2, 3]), new Error("socket reset")),
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(new Uint8Array([4, 5]), {
+					status: 206,
+					headers: { "content-range": "bytes 3-4/5" },
+				}),
+			);
+
+		const first = await fetchTweetMedia({ fetchImpl: fetchMock, pacingMs: 0 });
+
+		const mediaDir = path.join(root, "media", "originals");
+		expect(first).toMatchObject({
+			fetched: 0,
+			failed: 1,
+			failures: [
+				expect.objectContaining({
+					media_key: "flaky",
+					reason: "socket reset",
+				}),
+			],
+		});
+		expect(readFileSync(path.join(mediaDir, "flaky.tmp"))).toEqual(
+			Buffer.from([1, 2, 3]),
+		);
+
+		await fetchTweetMedia({ fetchImpl: fetchMock, pacingMs: 0 });
+
+		const [, init] = fetchMock.mock.calls[1] as unknown as [
+			string,
+			RequestInit,
+		];
+		expect(init.headers).toMatchObject({ range: "bytes=3-" });
+		expect(readFileSync(path.join(mediaDir, "flaky.mp4"))).toEqual(
+			Buffer.from([1, 2, 3, 4, 5]),
+		);
+		expect(existsSync(path.join(mediaDir, "flaky.tmp"))).toBe(false);
 	});
 
 	it("resumes partial video tmp files with a range request", async () => {
