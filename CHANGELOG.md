@@ -11,8 +11,13 @@
 - Hydrate missing link-discussion profile avatars through `bird`/`xurl` so hover sheets can upgrade archive placeholders into real profile cards.
 - Add inline tweet conversation expansion in the web timeline, preserving the selected reply's parent chain before broad thread context.
 
+### Changed
+
+- Update npm dependencies, including React, Vite, Vitest, Playwright, Tailwind, Kysely, TanStack packages, oxlint, and oxfmt.
+
 ### Fixed
 
+- Isolate the default `bird` command config test from the maintainer's local `~/.birdclaw/config.json`.
 - Skip non-numeric archive placeholder IDs such as self-DM conversation IDs when hydrating profiles through X, so one malformed local ID no longer aborts the batch. Thanks @nfarina.
 - Include expanded short URLs and link occurrences in Git-friendly backups so linked-tweet search survives backup restore.
 - Prefer `bird` for follow graph sync in `auto` mode, keeping `xurl` as an explicit fallback for accounts where OAuth2 follow reads work.
