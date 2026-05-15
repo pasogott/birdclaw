@@ -172,6 +172,31 @@ describe("link index", () => {
 		rmSync(homeDir, { recursive: true, force: true });
 	});
 
+	it("keeps fresh demo link insights after rebuilding occurrences", async () => {
+		getNativeDb();
+		const { getLinkInsights } = await import("./link-insights");
+		const { backfillLinkIndex } = await import("./link-index");
+		const fetchImpl = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 404,
+			url: "https://t.co/miss",
+		} as Response);
+
+		expect(getLinkInsights({ kind: "links" }).items).toHaveLength(2);
+		expect(getLinkInsights({ kind: "videos" }).items).toHaveLength(1);
+		expect(
+			getLinkInsights({ kind: "videos" }).items[0]?.mentions[0]?.commentText,
+		).not.toContain("https://t.co/");
+
+		await backfillLinkIndex({ fetchImpl });
+
+		expect(getLinkInsights({ kind: "links" }).items).toHaveLength(2);
+		expect(getLinkInsights({ kind: "videos" }).items).toHaveLength(1);
+		expect(
+			getLinkInsights({ kind: "videos" }).items[0]?.mentions[0]?.commentText,
+		).not.toContain("https://t.co/");
+	});
+
 	it("finds a DM t.co share through the expanded linked tweet", async () => {
 		const db = insertAccountFixture();
 		db.prepare(`

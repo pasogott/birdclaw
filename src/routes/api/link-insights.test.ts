@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getRouteHandler } from "#/test/route-handlers";
 
 const getLinkInsightsMock = vi.fn();
+const getNativeDbMock = vi.fn();
 const maybeAutoUpdateBackupMock = vi.fn();
 
 vi.mock("#/lib/link-insights", () => ({
@@ -10,6 +11,9 @@ vi.mock("#/lib/link-insights", () => ({
 }));
 vi.mock("#/lib/backup", () => ({
 	maybeAutoUpdateBackup: () => maybeAutoUpdateBackupMock(),
+}));
+vi.mock("#/lib/db", () => ({
+	getNativeDb: () => getNativeDbMock(),
 }));
 
 import { Route } from "./link-insights";
@@ -19,7 +23,9 @@ const GET = getRouteHandler(Route, "GET");
 describe("api link insights route", () => {
 	beforeEach(() => {
 		getLinkInsightsMock.mockReset();
+		getNativeDbMock.mockReset();
 		maybeAutoUpdateBackupMock.mockReset();
+		getNativeDbMock.mockReturnValue({ kind: "test-db" });
 		maybeAutoUpdateBackupMock.mockResolvedValue({ skipped: true });
 		getLinkInsightsMock.mockReturnValue({
 			kind: "links",
@@ -50,6 +56,8 @@ describe("api link insights route", () => {
 			limit: 12,
 			commentsLimit: 3,
 		});
+		expect(maybeAutoUpdateBackupMock).toHaveBeenCalledWith();
+		expect(getNativeDbMock).toHaveBeenCalledOnce();
 		expect(response.status).toBe(200);
 	});
 

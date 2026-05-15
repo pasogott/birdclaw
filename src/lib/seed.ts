@@ -32,6 +32,9 @@ export function seedDemoData(db: Database) {
 	if (accountCount.count > 0) {
 		return;
 	}
+	const linkNow = new Date();
+	const linkMinutesAgo = (minutes: number) =>
+		new Date(linkNow.getTime() - minutes * 60_000).toISOString();
 
 	const insertAccount = db.prepare(`
     insert into accounts (id, name, handle, external_user_id, transport, is_default, created_at)
@@ -75,6 +78,24 @@ export function seedDemoData(db: Database) {
 	const insertDmFts = db.prepare(
 		"insert into dm_fts (message_id, text) values (?, ?)",
 	);
+	const insertUrlExpansion = db.prepare(`
+    insert into url_expansions (
+      short_url, expanded_url, final_url, status, expanded_tweet_id,
+      expanded_handle, title, description, image_url, site_name, error, source, updated_at
+    ) values (
+      @shortUrl, @expandedUrl, @finalUrl, @status, @expandedTweetId,
+      @expandedHandle, @title, @description, @imageUrl, @siteName, @error, @source, @updatedAt
+    )
+  `);
+	const insertLinkOccurrence = db.prepare(`
+    insert into link_occurrences (
+      source_kind, source_id, source_position, short_url, account_id,
+      conversation_id, direction, created_at
+    ) values (
+      @sourceKind, @sourceId, @sourcePosition, @shortUrl, @accountId,
+      @conversationId, @direction, @createdAt
+    )
+  `);
 
 	const accounts = [
 		{
@@ -172,8 +193,8 @@ export function seedDemoData(db: Database) {
 			accountId: "acct_primary",
 			authorProfileId: "profile_sam",
 			kind: "home",
-			text: "We need more software that defaults to local-first, legible state, and repairable failure modes.",
-			createdAt: isoMinutesAgo(18),
+			text: "We need more software that defaults to local-first, legible state, and repairable failure modes. https://t.co/local",
+			createdAt: linkMinutesAgo(18),
 			isReplied: 0,
 			replyToId: null,
 			likeCount: 1240,
@@ -186,8 +207,8 @@ export function seedDemoData(db: Database) {
 						url: "https://t.co/local",
 						expandedUrl: "https://birdclaw.dev/local-first-systems",
 						displayUrl: "birdclaw.dev/local-first-systems",
-						start: 85,
-						end: 108,
+						start: 97,
+						end: 115,
 						title: "Local-first systems",
 						description: "Design notes on durable local software.",
 					},
@@ -227,8 +248,8 @@ export function seedDemoData(db: Database) {
 			accountId: "acct_primary",
 			authorProfileId: "profile_ava",
 			kind: "home",
-			text: "New developer-platform pricing survey out today. Early signal: teams want fewer layers, not more.",
-			createdAt: isoMinutesAgo(91),
+			text: "New developer-platform pricing survey out today. Early signal: teams want fewer layers, not more. https://t.co/survey https://t.co/video",
+			createdAt: linkMinutesAgo(91),
 			isReplied: 0,
 			replyToId: null,
 			likeCount: 128,
@@ -241,11 +262,20 @@ export function seedDemoData(db: Database) {
 						url: "https://t.co/survey",
 						expandedUrl: "https://example.com/developer-platform-pricing",
 						displayUrl: "example.com/developer-platform-pricing",
-						start: 78,
-						end: 101,
+						start: 98,
+						end: 117,
 						title: "Developer platform pricing survey",
 						description:
 							"A simple inline link preview card from tweet URL entities.",
+					},
+					{
+						url: "https://t.co/video",
+						expandedUrl: "https://youtu.be/GMIWm5y90xA",
+						displayUrl: "youtu.be/GMIWm5y90xA",
+						start: 118,
+						end: 136,
+						title: "Agent query walkthrough",
+						description: "Short demo video for local query workflows.",
 					},
 				],
 			}),
@@ -466,6 +496,87 @@ export function seedDemoData(db: Database) {
 		},
 	];
 
+	const urlExpansions = [
+		{
+			shortUrl: "https://t.co/local",
+			expandedUrl: "https://birdclaw.dev/local-first-systems",
+			finalUrl: "https://birdclaw.dev/local-first-systems",
+			status: "hit",
+			expandedTweetId: null,
+			expandedHandle: null,
+			title: "Local-first systems",
+			description: "Design notes on durable local software.",
+			imageUrl: null,
+			siteName: "birdclaw",
+			error: null,
+			source: "demo",
+			updatedAt: linkNow.toISOString(),
+		},
+		{
+			shortUrl: "https://t.co/survey",
+			expandedUrl: "https://example.com/developer-platform-pricing",
+			finalUrl: "https://example.com/developer-platform-pricing",
+			status: "hit",
+			expandedTweetId: null,
+			expandedHandle: null,
+			title: "Developer platform pricing survey",
+			description: "A simple inline link preview card from tweet URL entities.",
+			imageUrl: null,
+			siteName: "Example",
+			error: null,
+			source: "demo",
+			updatedAt: linkNow.toISOString(),
+		},
+		{
+			shortUrl: "https://t.co/video",
+			expandedUrl: "https://youtu.be/GMIWm5y90xA",
+			finalUrl: "https://youtu.be/GMIWm5y90xA",
+			status: "hit",
+			expandedTweetId: null,
+			expandedHandle: null,
+			title: "Agent query walkthrough",
+			description: "Short demo video for local query workflows.",
+			imageUrl: null,
+			siteName: "YouTube",
+			error: null,
+			source: "demo",
+			updatedAt: linkNow.toISOString(),
+		},
+	];
+
+	const linkOccurrences = [
+		{
+			sourceKind: "tweet",
+			sourceId: "tweet_001",
+			sourcePosition: 0,
+			shortUrl: "https://t.co/local",
+			accountId: "acct_primary",
+			conversationId: null,
+			direction: null,
+			createdAt: linkMinutesAgo(18),
+		},
+		{
+			sourceKind: "tweet",
+			sourceId: "tweet_003",
+			sourcePosition: 0,
+			shortUrl: "https://t.co/survey",
+			accountId: "acct_primary",
+			conversationId: null,
+			direction: null,
+			createdAt: linkMinutesAgo(91),
+		},
+		{
+			sourceKind: "tweet",
+			sourceId: "tweet_003",
+			sourcePosition: 1,
+			shortUrl: "https://t.co/video",
+			accountId: "acct_primary",
+			conversationId: null,
+			direction: null,
+			createdAt: linkMinutesAgo(91),
+		},
+	];
+
 	const transaction = db.transaction(() => {
 		for (const account of accounts) {
 			insertAccount.run(account);
@@ -487,6 +598,14 @@ export function seedDemoData(db: Database) {
 		for (const message of messages) {
 			insertMessage.run(message);
 			insertDmFts.run(message.id, message.text);
+		}
+
+		for (const expansion of urlExpansions) {
+			insertUrlExpansion.run(expansion);
+		}
+
+		for (const occurrence of linkOccurrences) {
+			insertLinkOccurrence.run(occurrence);
 		}
 	});
 

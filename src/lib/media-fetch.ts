@@ -6,17 +6,14 @@
  * skips files present on disk, paces requests, and backs off on 429.
  */
 import {
-	createWriteStream,
 	existsSync,
 	mkdirSync,
 	readFileSync,
 	readdirSync,
 	statSync,
 } from "node:fs";
-import { copyFile, rename, rm } from "node:fs/promises";
+import { appendFile, copyFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { getBirdclawPaths } from "./config";
 import { getNativeDb } from "./db";
 
@@ -498,30 +495,35 @@ async function writeResponseBody(
 ) {
 	if (!response.body) throw new Error("missing response body");
 	let bytes = 0;
-	const stream = Readable.fromWeb(
-		response.body as Parameters<typeof Readable.fromWeb>[0],
-	);
-	const limiter = new Transform({
-		transform(chunk: Buffer, _encoding, callback) {
-			bytes += chunk.byteLength;
-			if (initialBytes + bytes > maxBytes) {
-				callback(new Error("max-bytes"));
-				return;
-			}
-			callback(null, chunk);
-		},
-	});
+	if (!append) {
+		await writeFile(tmpPath, Buffer.alloc(0));
+	}
+	const reader = response.body.getReader();
 	try {
-		await pipeline(
-			stream,
-			limiter,
-			createWriteStream(tmpPath, { flags: append ? "a" : "w" }),
-		);
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) {
+				break;
+			}
+			const chunk = Buffer.from(value);
+			bytes += chunk.length;
+			if (initialBytes + bytes > maxBytes) {
+				throw new Error("max-bytes");
+			}
+			await appendFile(tmpPath, chunk);
+		}
 	} catch (error) {
 		if (error instanceof Error && error.message === "max-bytes") {
 			await rm(tmpPath, { force: true });
 		}
+		try {
+			await reader.cancel(error);
+		} catch {
+			// The stream may already be errored; preserving the original failure matters.
+		}
 		throw error;
+	} finally {
+		reader.releaseLock();
 	}
 	return bytes;
 }

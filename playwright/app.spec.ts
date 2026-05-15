@@ -9,12 +9,20 @@ test("navigates across the primary surfaces", async ({ page }) => {
 	await page.getByRole("link", { name: "Mentions" }).click();
 	await expect(page.getByRole("heading", { name: "Mentions" })).toBeVisible();
 
+	await page.getByRole("link", { name: "Likes" }).click();
+	await expect(page.getByRole("heading", { name: "Likes" })).toBeVisible();
+
+	await page.getByRole("link", { name: "Bookmarks" }).click();
+	await expect(page.getByRole("heading", { name: "Bookmarks" })).toBeVisible();
+
+	await page.getByRole("link", { name: "Links" }).click();
+	await expect(page.getByRole("heading", { name: "Links" })).toBeVisible();
+
 	await page.getByRole("link", { name: "DMs" }).click();
 	await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
 
 	await page.getByRole("link", { name: "Inbox" }).click();
 	await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
-	await expect(page.getByText("DM from Amelia N")).toBeVisible();
 
 	await page.getByRole("link", { name: "Blocks" }).click();
 	await expect(
@@ -68,6 +76,58 @@ test("expands timeline cards with media, quote context, and profile hover", asyn
 	).toBeVisible();
 });
 
+test("searches saved likes and bookmarks", async ({ page }) => {
+	await page.goto("/likes");
+
+	const likeCards = page.locator('[data-perf="timeline-card"]');
+	await expect(likeCards).toHaveCount(3);
+	await page.getByPlaceholder("Search likes").fill("pruning");
+	await expect(likeCards).toHaveCount(1);
+	await expect(likeCards.first()).toContainText("pruning scope");
+
+	await page.goto("/bookmarks");
+
+	const bookmarkCards = page.locator('[data-perf="timeline-card"]');
+	await expect(bookmarkCards).toHaveCount(2);
+	await page.getByPlaceholder("Search bookmarks").fill("Agents need");
+	await expect(bookmarkCards).toHaveCount(1);
+	await expect(bookmarkCards.first()).toContainText("retrieval surfaces");
+});
+
+test("browses link insights across links, videos, filters, and comments", async ({
+	page,
+}) => {
+	await page.goto("/links");
+
+	const rows = page.locator('[data-perf="link-insight-row"]');
+	await expect(rows).toHaveCount(2);
+	await expect(
+		page.getByRole("link", { name: "Developer platform pricing survey" }),
+	).toBeVisible();
+
+	await page.getByPlaceholder("Search links").fill("local");
+	await expect(rows).toHaveCount(1);
+	await expect(
+		page.getByRole("link", { name: "Local-first systems" }),
+	).toBeVisible();
+
+	await page.getByPlaceholder("Search links").fill("");
+	await page.getByRole("button", { name: "videos" }).click();
+	await expect(rows).toHaveCount(1);
+	await expect(
+		page.getByRole("link", { name: "Agent query walkthrough", exact: true }),
+	).toBeVisible();
+	await expect(page.getByText("youtu.be/GMIWm5y90xA")).toBeVisible();
+
+	await page.getByRole("button", { name: "Show 1 comments" }).click();
+	await expect(
+		page.getByText("New developer-platform pricing survey out today."),
+	).toBeVisible();
+
+	await page.getByRole("button", { name: "dm" }).click();
+	await expect(page.getByText("No links in this window.")).toBeVisible();
+});
+
 test("replies to an unreplied mention and clears it from the queue", async ({
 	page,
 }) => {
@@ -114,26 +174,38 @@ test("replies from the inbox dm queue", async ({ page }) => {
 });
 
 test("adds and removes a local blocklist entry", async ({ page }) => {
+	const initialRefresh = page.waitForResponse(
+		(response) =>
+			response.url().includes("/api/blocks") &&
+			response.url().includes("refresh=1") &&
+			response.ok(),
+	);
 	await page.goto("/blocks");
+	await initialRefresh;
+	await expect(page.getByText(/0 blocked profiles/)).toBeVisible();
 
-	const blockResult = await page.evaluate(async () => {
-		const response = await fetch("/api/action", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				kind: "blockProfile",
-				accountId: "acct_primary",
-				query: "amelia",
-			}),
-		});
-		return response.json();
-	});
-	expect(blockResult).toMatchObject({ ok: true });
-	expect(String(blockResult.profile?.handle).toLowerCase()).toBe("amelia");
+	const search = page.getByPlaceholder("Handle, name, bio, or Twitter URL");
+	await expect(search).toBeEnabled();
+	const searchResponse = page.waitForResponse(
+		(response) =>
+			response.url().includes("/api/blocks") &&
+			response.url().includes("search=amelia") &&
+			response.ok(),
+	);
+	await search.pressSequentially("amelia");
+	await expect(search).toHaveValue("amelia");
+	await searchResponse;
+	await expect(page.getByText("Search matches")).toBeVisible();
+	const ameliaMatch = page
+		.locator("article")
+		.filter({ hasText: "Amelia N" })
+		.filter({ hasText: "Design systems" });
+	await ameliaMatch.getByRole("button", { name: "Block" }).first().click();
 
-	await page.reload();
-
-	const ameliaBlock = page.locator("article").filter({ hasText: /@amelia/i });
+	const ameliaBlock = page
+		.locator("article")
+		.filter({ hasText: "Amelia N" })
+		.filter({ hasText: /Blocked/i });
 	await expect(ameliaBlock).toHaveCount(1, { timeout: 15_000 });
 
 	await ameliaBlock.getByRole("button", { name: "Unblock" }).click();

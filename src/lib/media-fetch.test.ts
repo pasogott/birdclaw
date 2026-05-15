@@ -73,10 +73,15 @@ function mp4(name: string, bitrate = 832000) {
 }
 
 function failingStream(bytes: Uint8Array, error: Error) {
+	let sent = false;
 	return new ReadableStream<Uint8Array>({
-		start(controller) {
+		pull(controller) {
+			if (sent) {
+				controller.error(error);
+				return;
+			}
+			sent = true;
 			controller.enqueue(bytes);
-			setTimeout(() => controller.error(error), 10);
 		},
 	});
 }

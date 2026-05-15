@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { maybeAutoUpdateBackup } from "#/lib/backup";
+import { getNativeDb } from "#/lib/db";
 import { getLinkInsights } from "#/lib/link-insights";
 import type {
 	LinkInsightKind,
@@ -58,6 +59,7 @@ export const Route = createFileRoute("/api/link-insights")({
 		handlers: {
 			GET: async ({ request }) => {
 				await maybeAutoUpdateBackup();
+				getNativeDb();
 				const url = new URL(request.url);
 				return json(
 					getLinkInsights({

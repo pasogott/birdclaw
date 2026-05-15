@@ -38,6 +38,7 @@ afterEach(() => {
 	resetDatabaseForTests();
 	resetBirdclawPathsForTests();
 	delete process.env.BIRDCLAW_HOME;
+	delete process.env.BIRDCLAW_DISABLE_LIVE_PROFILE_LOOKUP;
 
 	for (const dir of tempDirs.splice(0)) {
 		rmSync(dir, { recursive: true, force: true });
@@ -135,6 +136,35 @@ describe("moderation target helpers", () => {
 			}),
 			externalUserId: null,
 		});
+	});
+
+	it("keeps local profile matches local when live profile lookup is disabled", async () => {
+		makeTempHome();
+		process.env.BIRDCLAW_DISABLE_LIVE_PROFILE_LOOKUP = "1";
+		const { resolveProfile } = await import("./moderation-target");
+
+		await expect(resolveProfile("profile_amelia")).resolves.toMatchObject({
+			profile: expect.objectContaining({
+				id: "profile_amelia",
+				handle: "amelia",
+			}),
+			externalUserId: null,
+		});
+		expect(mocks.lookupProfileViaBird).not.toHaveBeenCalled();
+		expect(mocks.lookupUsersByHandles).not.toHaveBeenCalled();
+	});
+
+	it("does not live lookup missing profiles when live profile lookup is disabled", async () => {
+		makeTempHome();
+		process.env.BIRDCLAW_DISABLE_LIVE_PROFILE_LOOKUP = "1";
+		const { resolveProfile } = await import("./moderation-target");
+
+		await expect(resolveProfile("missing")).rejects.toThrow(
+			"Profile not found locally: missing",
+		);
+		expect(mocks.lookupProfileViaBird).not.toHaveBeenCalled();
+		expect(mocks.lookupUsersByHandles).not.toHaveBeenCalled();
+		expect(mocks.lookupUsersByIds).not.toHaveBeenCalled();
 	});
 
 	it("falls back to xurl lookups when bird profile lookup misses", async () => {

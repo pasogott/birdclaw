@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- Seed demo link insight data before direct `/links` route loads, so the lane is populated even when it is the first web route opened.
 - Isolate the default `bird` command config test from the maintainer's local `~/.birdclaw/config.json`.
 - Skip non-numeric archive placeholder IDs such as self-DM conversation IDs when hydrating profiles through X, so one malformed local ID no longer aborts the batch. Thanks @nfarina.
 - Include expanded short URLs and link occurrences in Git-friendly backups so linked-tweet search survives backup restore.

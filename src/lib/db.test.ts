@@ -20,6 +20,30 @@ afterEach(() => {
 });
 
 describe("database init", () => {
+	it("seeds demo data after an initial unseeded open", () => {
+		const tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-db-"));
+		tempDirs.push(tempDir);
+		process.env.BIRDCLAW_HOME = tempDir;
+
+		const unseededDb = getNativeDb({ seedDemoData: false });
+		expect(
+			unseededDb.prepare("select count(*) as count from accounts").get(),
+		).toEqual({ count: 0 });
+
+		const seededDb = getNativeDb();
+
+		expect(
+			seededDb.prepare("select count(*) as count from accounts").get(),
+		).toEqual({ count: 2 });
+		expect(
+			seededDb
+				.prepare(
+					"select count(*) as count from link_occurrences where source_kind = 'tweet'",
+				)
+				.get(),
+		).toEqual({ count: 3 });
+	});
+
 	it("migrates legacy tweet tables before creating quoted tweet indexes", () => {
 		const tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-db-"));
 		tempDirs.push(tempDir);

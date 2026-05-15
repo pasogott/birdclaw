@@ -100,6 +100,12 @@ export async function resolveProfile(
 	}
 
 	const local = resolveLocalProfile(db, normalizedQuery);
+	if (process.env.BIRDCLAW_DISABLE_LIVE_PROFILE_LOOKUP === "1") {
+		if (local) {
+			return local;
+		}
+		throw new Error(`Profile not found locally: ${query}`);
+	}
 	if (
 		local &&
 		!local.profile.id.startsWith("profile_group_") &&

@@ -284,6 +284,7 @@ export interface BirdclawDatabase {
 
 let nativeDb: Database | undefined;
 let kyselyDb: Kysely<BirdclawDatabase> | undefined;
+let demoSeedAttempted = false;
 
 export interface InitDatabaseOptions {
 	seedDemoData?: boolean;
@@ -919,6 +920,17 @@ function ensureSchemaIndexes(db: Database) {
 	db.exec(INDEX_SQL);
 }
 
+function ensureDemoData(db: Database) {
+	if (demoSeedAttempted) {
+		return;
+	}
+
+	seedDemoData(db);
+	backfillTweetCollections(db);
+	backfillTweetAccountEdges(db);
+	demoSeedAttempted = true;
+}
+
 function initDatabase(options: InitDatabaseOptions = {}) {
 	ensureBirdclawDirs();
 
@@ -939,10 +951,13 @@ function initDatabase(options: InitDatabaseOptions = {}) {
 		ensureFollowGraphTables(nativeDb);
 		ensureSchemaIndexes(nativeDb);
 		if (options.seedDemoData !== false) {
-			seedDemoData(nativeDb);
+			ensureDemoData(nativeDb);
+		} else {
+			backfillTweetCollections(nativeDb);
+			backfillTweetAccountEdges(nativeDb);
 		}
-		backfillTweetCollections(nativeDb);
-		backfillTweetAccountEdges(nativeDb);
+	} else if (options.seedDemoData !== false) {
+		ensureDemoData(nativeDb);
 	}
 
 	if (!kyselyDb) {
@@ -970,4 +985,5 @@ export function resetDatabaseForTests() {
 
 	nativeDb?.close();
 	nativeDb = undefined;
+	demoSeedAttempted = false;
 }
