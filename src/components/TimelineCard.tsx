@@ -207,11 +207,14 @@ function getHiddenMediaUrlRanges(
 		.map((entry) => ({ start: entry.start, end: entry.end }));
 }
 
-function getVisibleUrlCards(item: TimelineItem, entities: TweetEntities) {
-	const quotedUrl = item.quotedTweet ? item.quotedTweet.id : null;
+function getVisibleUrlCards(
+	entities: TweetEntities,
+	quotedTweetId: string | null,
+) {
 	return (entities.urls ?? []).filter((entry) => {
-		if (!item.quotedTweet) return true;
-		return !entry.expandedUrl.includes(quotedUrl ?? "");
+		if (isUnresolvedShortUrlEntity(entry)) return false;
+		if (!quotedTweetId) return true;
+		return !entry.expandedUrl.includes(quotedTweetId);
 	});
 }
 
@@ -233,20 +236,42 @@ export function TimelineCard({
 }) {
 	const canReply =
 		showReplyControls && item.kind !== "like" && item.kind !== "bookmark";
-	const conversation = useConversationSurface(item.id);
+	const displayTweet = item.retweetedTweet ?? item;
+	const displayTweetId = displayTweet.id;
+	const interactionTweetId =
+		item.retweetedTweet && displayTweetId === `${item.id}:retweeted`
+			? item.id
+			: displayTweetId;
+	const displayAuthor = displayTweet.author;
+	const conversation = useConversationSurface(item.id, interactionTweetId);
 	const visibleEntities = getVisibleEntities(
-		item.entities,
-		item.media,
-		item.id,
-		item.text,
+		displayTweet.entities,
+		displayTweet.media,
+		displayTweet.id,
+		displayTweet.text,
 	);
 	const hiddenMediaUrlRanges = getHiddenMediaUrlRanges(
-		item.entities,
-		item.media,
-		item.id,
-		item.text,
+		displayTweet.entities,
+		displayTweet.media,
+		displayTweet.id,
+		displayTweet.text,
 	);
-	const hasConversation = Boolean(item.replyToTweet || item.replyToId);
+	const visibleUrlCards = getVisibleUrlCards(
+		visibleEntities,
+		item.retweetedTweet ? null : (item.quotedTweet?.id ?? null),
+	);
+	const displayMediaCount = item.retweetedTweet
+		? (displayTweet.mediaCount ?? displayTweet.media.length)
+		: item.mediaCount;
+	const displayIsReplied = displayTweet.isReplied ?? item.isReplied;
+	const displayLikeCount = displayTweet.likeCount ?? item.likeCount;
+	const displayBookmarked = displayTweet.bookmarked ?? item.bookmarked;
+	const displayLiked = displayTweet.liked ?? item.liked;
+	const hasConversation = Boolean(
+		item.retweetedTweet
+			? displayTweet.replyToId
+			: item.replyToTweet || item.replyToId,
+	);
 
 	return (
 		<article
@@ -260,24 +285,34 @@ export function TimelineCard({
 			}}
 		>
 			<AvatarChip
-				avatarUrl={item.author.avatarUrl}
-				hue={item.author.avatarHue}
-				name={item.author.displayName}
-				profileId={item.author.id}
+				avatarUrl={displayAuthor.avatarUrl}
+				hue={displayAuthor.avatarHue}
+				name={displayAuthor.displayName}
+				profileId={displayAuthor.id}
 			/>
 			<div className={feedRowBodyClass}>
+				{item.retweetedTweet ? (
+					<div className="inline-flex items-center gap-2 text-[13px] font-medium text-[var(--ink-soft)]">
+						<Repeat2 className="size-4" strokeWidth={1.8} />
+						<ProfilePreview profile={item.author}>
+							<span>{item.author.displayName} reposted</span>
+						</ProfilePreview>
+					</div>
+				) : null}
 				<header className={feedRowHeaderClass}>
-					<ProfilePreview profile={item.author}>
+					<ProfilePreview profile={displayAuthor}>
 						<span className="flex min-w-0 items-center gap-1.5">
 							<span className={feedRowNameClass}>
-								{item.author.displayName}
+								{displayAuthor.displayName}
 							</span>
-							<span className={feedRowHandleClass}>@{item.author.handle}</span>
+							<span className={feedRowHandleClass}>
+								@{displayAuthor.handle}
+							</span>
 						</span>
 					</ProfilePreview>
 					<span className={feedRowDotClass}>·</span>
 					<span className={feedRowTimestampClass}>
-						{formatShortTimestamp(item.createdAt)}
+						{formatShortTimestamp(displayTweet.createdAt)}
 					</span>
 					{canReply || hasConversation ? (
 						<span className="ml-auto inline-flex items-center gap-1">
@@ -296,41 +331,43 @@ export function TimelineCard({
 							) : null}
 							{canReply ? (
 								<span
-									aria-label={item.isReplied ? "We replied" : "Reply open"}
+									aria-label={displayIsReplied ? "We replied" : "Reply open"}
 									className={cx(
 										feedRowStatePillClass,
-										item.isReplied
+										displayIsReplied
 											? feedRowStatePillActiveClass
 											: feedRowStatePillOpenClass,
 									)}
-									title={item.isReplied ? "We replied" : "Reply open"}
+									title={displayIsReplied ? "We replied" : "Reply open"}
 								>
-									{item.isReplied ? (
+									{displayIsReplied ? (
 										<CheckCircle2 className="size-3.5" strokeWidth={2} />
 									) : (
 										<Circle className="size-3" strokeWidth={2.2} />
 									)}
-									{item.isReplied ? "replied" : "open"}
+									{displayIsReplied ? "replied" : "open"}
 								</span>
 							) : null}
 						</span>
 					) : null}
 				</header>
 				{item.retweetedTweet ? (
-					<div className="mt-2 space-y-2">
-						<div className="inline-flex items-center gap-2 text-[13px] font-medium text-[var(--ink-soft)]">
-							<Repeat2 className="size-4" strokeWidth={1.8} />
-							<ProfilePreview profile={item.author}>
-								<span>{item.author.displayName} reposted</span>
-							</ProfilePreview>
-						</div>
-						<div className={embeddedCardClass}>
-							<EmbeddedTweetCard
-								item={item.retweetedTweet}
-								label="Reposted tweet"
+					<>
+						<TweetRichText
+							className={feedRowTextClass}
+							entities={displayTweet.entities}
+							hiddenUrlRanges={hiddenMediaUrlRanges}
+							text={displayTweet.text}
+						/>
+						<TweetMediaGrid items={displayTweet.media} />
+						{visibleUrlCards.map((entry, index) => (
+							<LinkPreviewCard
+								key={`${entry.expandedUrl}-${String(index)}`}
+								entry={entry}
+								index={index}
 							/>
-						</div>
-					</div>
+						))}
+					</>
 				) : (
 					<>
 						<TweetRichText
@@ -356,7 +393,7 @@ export function TimelineCard({
 								/>
 							</div>
 						) : null}
-						{getVisibleUrlCards(item, visibleEntities).map((entry, index) => (
+						{visibleUrlCards.map((entry, index) => (
 							<LinkPreviewCard
 								key={`${entry.expandedUrl}-${String(index)}`}
 								entry={entry}
@@ -394,7 +431,7 @@ export function TimelineCard({
 								className={feedActionButtonClass}
 								onClick={(event) => {
 									event.stopPropagation();
-									onReply(item.id);
+									onReply(interactionTweetId);
 								}}
 								type="button"
 								aria-label="Reply"
@@ -418,7 +455,7 @@ export function TimelineCard({
 								feedActionButtonClass,
 								feedActionLikeClass,
 								"cursor-default",
-								item.liked && "text-[var(--like)]",
+								displayLiked && "text-[var(--like)]",
 							)}
 						>
 							<span
@@ -430,14 +467,14 @@ export function TimelineCard({
 								<Heart
 									className={feedActionIconClass}
 									strokeWidth={1.7}
-									fill={item.liked ? "currentColor" : "none"}
+									fill={displayLiked ? "currentColor" : "none"}
 								/>
 							</span>
-							<span>{formatCompactNumber(item.likeCount)}</span>
+							<span>{formatCompactNumber(displayLikeCount)}</span>
 						</span>
 						<span className={cx(feedActionButtonClass, "cursor-default")}>
 							<span className={feedActionIconWrapClass}>
-								{item.bookmarked ? (
+								{displayBookmarked ? (
 									<BookmarkCheck
 										className={feedActionIconClass}
 										strokeWidth={1.7}
@@ -449,16 +486,16 @@ export function TimelineCard({
 						</span>
 					</div>
 					<div className="flex items-center gap-2 text-[12px] text-[var(--ink-soft)]">
-						<span>{item.mediaCount} media</span>
+						<span>{displayMediaCount} media</span>
 						<span className={mutedDotClass} />
-						<span>{item.bookmarked ? "bookmarked" : "not bookmarked"}</span>
+						<span>{displayBookmarked ? "bookmarked" : "not bookmarked"}</span>
 						<span className={mutedDotClass} />
 						<span>{item.accountHandle}</span>
 					</div>
 				</footer>
 				{conversation.isOpen ? (
 					<ConversationThread
-						anchorId={item.id}
+						anchorId={interactionTweetId}
 						error={conversation.error}
 						items={conversation.items}
 						loading={conversation.loading}

@@ -350,6 +350,21 @@ function buildEmbeddedTweet(
 			typeof row[`${prefix}reply_to_id`] === "string"
 				? String(row[`${prefix}reply_to_id`])
 				: null,
+		...(row[`${prefix}is_replied`] === undefined
+			? {}
+			: { isReplied: Boolean(row[`${prefix}is_replied`]) }),
+		...(row[`${prefix}like_count`] === undefined
+			? {}
+			: { likeCount: Number(row[`${prefix}like_count`]) }),
+		...(row[`${prefix}media_count`] === undefined
+			? {}
+			: { mediaCount: Number(row[`${prefix}media_count`]) }),
+		...(row[`${prefix}bookmarked`] === undefined
+			? {}
+			: { bookmarked: Boolean(row[`${prefix}bookmarked`]) }),
+		...(row[`${prefix}liked`] === undefined
+			? {}
+			: { liked: Boolean(row[`${prefix}liked`]) }),
 		author,
 		entities: enrichTimelineEntities(
 			db,
@@ -423,12 +438,14 @@ function buildRetweetedTweet(
 	resolveProfileByHandle: (handle: string) => ProfileRecord,
 ) {
 	const retweetedId = getRetweetedTweetIdFromRaw(row.edge_raw_json);
+	const accountId = String(row.account_id);
 	if (retweetedId) {
 		const tweet = getTweetById(
 			db,
 			urlExpansionCache,
 			retweetedId,
 			resolveProfileByHandle,
+			accountId,
 		);
 		if (tweet) {
 			return tweet;
@@ -442,10 +459,15 @@ function buildRetweetedTweet(
 
 	const author = resolveProfileByHandle(manualRetweet.handle);
 	return {
-		id: retweetedId ?? `${String(row.id)}:retweeted`,
+		id: `${String(row.id)}:retweeted`,
 		text: manualRetweet.text,
 		createdAt: String(row.created_at ?? new Date(0).toISOString()),
 		replyToId: null,
+		isReplied: Boolean(row.is_replied),
+		likeCount: Number(row.like_count ?? 0),
+		mediaCount: 0,
+		bookmarked: Boolean(row.bookmarked),
+		liked: Boolean(row.liked),
 		author,
 		entities: enrichTimelineEntities(
 			db,
@@ -1102,12 +1124,42 @@ export function listTimelineItems({
 	});
 }
 
-const conversationTweetSelect = `
+function conversationTweetSelect(accountId?: string) {
+	const collectionStateSelect = accountId
+		? `
+    case
+      when exists (
+        select 1 from tweet_collections collection
+        where collection.account_id = ?
+          and collection.tweet_id = t.id
+          and collection.kind = 'bookmarks'
+      ) then 1
+      when t.account_id = ? and t.bookmarked = 1 then 1
+      else 0
+    end as bookmarked,
+    case
+      when exists (
+        select 1 from tweet_collections collection
+        where collection.account_id = ?
+          and collection.tweet_id = t.id
+          and collection.kind = 'likes'
+      ) then 1
+      when t.account_id = ? and t.liked = 1 then 1
+      else 0
+    end as liked,`
+		: `
+    t.bookmarked,
+    t.liked,`;
+	return `
   select
     t.id,
     t.text,
     t.created_at,
     t.reply_to_id,
+    t.is_replied,
+    t.like_count,
+    t.media_count,
+    ${collectionStateSelect}
     t.entities_json,
     t.media_json,
     p.id as profile_id,
@@ -1122,16 +1174,21 @@ const conversationTweetSelect = `
   from tweets t
   join profiles p on p.id = t.author_profile_id
 `;
+}
 
 function getTweetById(
 	db: Database,
 	urlExpansionCache: UrlExpansionCache,
 	tweetId: string,
 	resolveProfileByHandle?: (handle: string) => ProfileRecord,
+	accountId?: string,
 ): EmbeddedTweet | null {
+	const stateParams = accountId
+		? [accountId, accountId, accountId, accountId]
+		: [];
 	const row = db
-		.prepare(`${conversationTweetSelect} where t.id = ?`)
-		.get(tweetId) as Record<string, unknown> | undefined;
+		.prepare(`${conversationTweetSelect(accountId)} where t.id = ?`)
+		.get(...stateParams, tweetId) as Record<string, unknown> | undefined;
 	if (!row) return null;
 	return buildEmbeddedTweet(
 		db,
@@ -1163,7 +1220,7 @@ function listTweetDescendants(
         join branch on child.reply_to_id = branch.id
         where branch.depth < 8
       )
-      ${conversationTweetSelect}
+      ${conversationTweetSelect()}
       join branch on branch.id = t.id
       where t.id != ?
       order by t.created_at asc

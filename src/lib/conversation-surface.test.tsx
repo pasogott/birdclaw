@@ -38,19 +38,27 @@ const tweet: EmbeddedTweet = {
 	text: "Conversation anchor",
 };
 
-function Probe({ tweetId }: { tweetId: string }) {
-	const surface = useConversationSurface(tweetId);
+function Probe({
+	tweetId,
+	fetchTweetId,
+}: {
+	tweetId: string;
+	fetchTweetId?: string;
+}) {
+	const surface = useConversationSurface(tweetId, fetchTweetId);
 	return (
 		<div>
-			<div data-testid="status">{surface.status}</div>
-			<div data-testid="open">{surface.isOpen ? "open" : "closed"}</div>
-			<div data-testid="items">{surface.items.length}</div>
-			<div data-testid="error">{surface.error ?? ""}</div>
+			<div data-testid={`${tweetId}-status`}>{surface.status}</div>
+			<div data-testid={`${tweetId}-open`}>
+				{surface.isOpen ? "open" : "closed"}
+			</div>
+			<div data-testid={`${tweetId}-items`}>{surface.items.length}</div>
+			<div data-testid={`${tweetId}-error`}>{surface.error ?? ""}</div>
 			<button onClick={surface.prefetch} type="button">
-				prefetch
+				prefetch {tweetId}
 			</button>
 			<button onClick={surface.toggle} type="button">
-				toggle
+				toggle {tweetId}
 			</button>
 		</div>
 	);
@@ -76,17 +84,17 @@ describe("conversation surface", () => {
 			</ConversationSurfaceScope>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "prefetch" }));
-		fireEvent.click(screen.getByRole("button", { name: "prefetch" }));
+		fireEvent.click(screen.getByRole("button", { name: "prefetch tweet_1" }));
+		fireEvent.click(screen.getByRole("button", { name: "prefetch tweet_1" }));
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 
 		await waitFor(() => {
-			expect(screen.getByTestId("status")).toHaveTextContent("ready");
+			expect(screen.getByTestId("tweet_1-status")).toHaveTextContent("ready");
 		});
-		expect(screen.getByTestId("items")).toHaveTextContent("1");
+		expect(screen.getByTestId("tweet_1-items")).toHaveTextContent("1");
 
-		fireEvent.click(screen.getByRole("button", { name: "toggle" }));
-		expect(screen.getByTestId("open")).toHaveTextContent("open");
+		fireEvent.click(screen.getByRole("button", { name: "toggle tweet_1" }));
+		expect(screen.getByTestId("tweet_1-open")).toHaveTextContent("open");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -104,10 +112,10 @@ describe("conversation surface", () => {
 			</ConversationSurfaceScope>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "prefetch" }));
-		fireEvent.click(screen.getByRole("button", { name: "toggle" }));
-		fireEvent.click(screen.getByRole("button", { name: "toggle" }));
-		fireEvent.click(screen.getByRole("button", { name: "toggle" }));
+		fireEvent.click(screen.getByRole("button", { name: "prefetch tweet_1" }));
+		fireEvent.click(screen.getByRole("button", { name: "toggle tweet_1" }));
+		fireEvent.click(screen.getByRole("button", { name: "toggle tweet_1" }));
+		fireEvent.click(screen.getByRole("button", { name: "toggle tweet_1" }));
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		resolvePending({
@@ -116,8 +124,36 @@ describe("conversation surface", () => {
 		});
 
 		await waitFor(() => {
-			expect(screen.getByTestId("status")).toHaveTextContent("ready");
+			expect(screen.getByTestId("tweet_1-status")).toHaveTextContent("ready");
 		});
+	});
+
+	it("keeps row-open state separate from the fetched tweet id", async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ items: [tweet], ok: true }),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(
+			<ConversationSurfaceScope>
+				<Probe fetchTweetId="tweet_original" tweetId="row_a" />
+				<Probe fetchTweetId="tweet_original" tweetId="row_b" />
+			</ConversationSurfaceScope>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "toggle row_a" }));
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			"/api/conversation?tweetId=tweet_original",
+		);
+		expect(screen.getByTestId("row_a-open")).toHaveTextContent("open");
+		expect(screen.getByTestId("row_b-open")).toHaveTextContent("closed");
+
+		await waitFor(() => {
+			expect(screen.getByTestId("row_a-status")).toHaveTextContent("ready");
+		});
+		expect(screen.getByTestId("row_b-status")).toHaveTextContent("idle");
 	});
 
 	it("exposes conversation loading as a lazy Effect program", async () => {
@@ -154,14 +190,16 @@ describe("conversation surface", () => {
 			</ConversationSurfaceScope>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "toggle" }));
+		fireEvent.click(screen.getByRole("button", { name: "toggle tweet_404" }));
 		await waitFor(() => {
-			expect(screen.getByTestId("status")).toHaveTextContent("error");
+			expect(screen.getByTestId("tweet_404-status")).toHaveTextContent("error");
 		});
-		expect(screen.getByTestId("error")).toHaveTextContent("Tweet not found");
+		expect(screen.getByTestId("tweet_404-error")).toHaveTextContent(
+			"Tweet not found",
+		);
 
-		fireEvent.click(screen.getByRole("button", { name: "prefetch" }));
-		expect(screen.getByTestId("status")).toHaveTextContent("loading");
+		fireEvent.click(screen.getByRole("button", { name: "prefetch tweet_404" }));
+		expect(screen.getByTestId("tweet_404-status")).toHaveTextContent("loading");
 		resetConversationSurface();
 		resolveStale({
 			ok: true,
@@ -169,7 +207,7 @@ describe("conversation surface", () => {
 		});
 
 		await waitFor(() => {
-			expect(screen.getByTestId("status")).toHaveTextContent("idle");
+			expect(screen.getByTestId("tweet_404-status")).toHaveTextContent("idle");
 		});
 	});
 });

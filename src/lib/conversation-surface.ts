@@ -87,18 +87,19 @@ function fetchConversationItemsEffect(tweetId: string) {
 }
 
 export function loadConversationEffect(
-	tweetId: string,
+	surfaceId: string,
+	tweetId = surfaceId,
 ): Effect.Effect<void, never> {
 	return Effect.gen(function* () {
-		const current = snapshot.records.get(tweetId);
-		if (current?.status === "ready" || inFlight.has(tweetId)) {
+		const current = snapshot.records.get(surfaceId);
+		if (current?.status === "ready" || inFlight.has(surfaceId)) {
 			return;
 		}
 
 		const loadGeneration = generation;
-		inFlight.add(tweetId);
+		inFlight.add(surfaceId);
 		yield* Effect.gen(function* () {
-			updateRecord(tweetId, {
+			updateRecord(surfaceId, {
 				error: null,
 				items: current?.items ?? [],
 				status: "loading",
@@ -115,13 +116,13 @@ export function loadConversationEffect(
 				return;
 			}
 			if (result.ok) {
-				updateRecord(tweetId, {
+				updateRecord(surfaceId, {
 					error: null,
 					items: result.items,
 					status: "ready",
 				});
 			} else {
-				updateRecord(tweetId, {
+				updateRecord(surfaceId, {
 					error:
 						result.error instanceof Error
 							? result.error.message
@@ -130,12 +131,12 @@ export function loadConversationEffect(
 					status: "error",
 				});
 			}
-		}).pipe(Effect.ensuring(Effect.sync(() => inFlight.delete(tweetId))));
+		}).pipe(Effect.ensuring(Effect.sync(() => inFlight.delete(surfaceId))));
 	});
 }
 
-function loadConversation(tweetId: string) {
-	return runEffectPromise(loadConversationEffect(tweetId));
+function loadConversation(surfaceId: string, tweetId = surfaceId) {
+	return runEffectPromise(loadConversationEffect(surfaceId, tweetId));
 }
 
 export function retainConversationSurfaceScope() {
@@ -166,30 +167,31 @@ export function ConversationSurfaceScope({
 	return children;
 }
 
-export function useConversationSurface(tweetId: string) {
+export function useConversationSurface(surfaceId: string, tweetId = surfaceId) {
 	const currentSnapshot = useSyncExternalStore(
 		subscribe,
 		getSnapshot,
 		getSnapshot,
 	);
-	const record = currentSnapshot.records.get(tweetId) ?? emptyRecord;
-	const isOpen = currentSnapshot.expandedTweetId === tweetId;
+	const record = currentSnapshot.records.get(surfaceId) ?? emptyRecord;
+	const isOpen = currentSnapshot.expandedTweetId === surfaceId;
 
 	const toggle = useCallback(() => {
-		const nextExpanded = snapshot.expandedTweetId === tweetId ? null : tweetId;
+		const nextExpanded =
+			snapshot.expandedTweetId === surfaceId ? null : surfaceId;
 		setSnapshot({ ...snapshot, expandedTweetId: nextExpanded });
 		if (nextExpanded) {
-			void loadConversation(tweetId);
+			void loadConversation(surfaceId, tweetId);
 		}
-	}, [tweetId]);
+	}, [surfaceId, tweetId]);
 
 	const prefetch = useCallback(() => {
-		const current = snapshot.records.get(tweetId);
+		const current = snapshot.records.get(surfaceId);
 		if (current?.status === "ready" || current?.status === "loading") {
 			return;
 		}
-		void loadConversation(tweetId);
-	}, [tweetId]);
+		void loadConversation(surfaceId, tweetId);
+	}, [surfaceId, tweetId]);
 
 	return {
 		error: record.error,

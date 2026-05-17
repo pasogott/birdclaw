@@ -132,7 +132,13 @@ describe("TimelineCard", () => {
 	});
 
 	it("renders retweets as the original tweet with repost attribution", () => {
-		render(
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ ok: true, anchorId: "tweet_original", items: [] }),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const onReply = vi.fn();
+		const { container } = render(
 			<TimelineCard
 				item={{
 					...item,
@@ -145,6 +151,75 @@ describe("TimelineCard", () => {
 					quotedTweet: null,
 					retweetedTweet: {
 						id: "tweet_original",
+						text: "Original app idea",
+						createdAt: "2026-03-08T11:55:00.000Z",
+						isReplied: true,
+						likeCount: 7,
+						mediaCount: 0,
+						bookmarked: false,
+						liked: false,
+						author: {
+							id: "profile_3",
+							handle: "ava",
+							displayName: "Ava",
+							bio: "Reporter",
+							followersCount: 400,
+							avatarHue: 120,
+							avatarUrl: "https://example.com/ava.jpg",
+							createdAt: "2026-03-08T09:00:00.000Z",
+						},
+						entities: {},
+						media: [],
+					},
+				}}
+				onReply={onReply}
+			/>,
+		);
+
+		expect(screen.getByText("Sam Altman reposted")).toBeInTheDocument();
+		expect(screen.getAllByAltText("Ava")[0]).toHaveAttribute(
+			"src",
+			"/api/avatar?profileId=profile_3",
+		);
+		expect(screen.getByText("Original app idea")).toBeInTheDocument();
+		expect(screen.getAllByText("@ava").length).toBeGreaterThan(0);
+		expect(screen.getByLabelText("We replied")).toBeInTheDocument();
+		expect(screen.getByText("7")).toBeInTheDocument();
+		expect(screen.getByText("not bookmarked")).toBeInTheDocument();
+		expect(screen.queryByText("Reposted tweet")).not.toBeInTheDocument();
+		expect(screen.queryByText(/RT @ava/)).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+		expect(onReply).toHaveBeenCalledWith("tweet_original");
+
+		const row = container.querySelector("[data-perf='timeline-card']");
+		if (!row) throw new Error("timeline card missing");
+		fireEvent.click(row);
+		expect(fetchMock).toHaveBeenCalledWith(
+			"/api/conversation?tweetId=tweet_original",
+		);
+	});
+
+	it("uses the wrapper tweet id for manual retweet interactions", () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ ok: true, anchorId: "tweet_manual", items: [] }),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const onReply = vi.fn();
+		const { container } = render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_manual",
+					text: "RT @ava: Original app idea",
+					entities: {},
+					media: [],
+					mediaCount: 0,
+					replyToTweet: null,
+					quotedTweet: null,
+					retweetedTweet: {
+						id: "tweet_manual:retweeted",
 						text: "Original app idea",
 						createdAt: "2026-03-08T11:55:00.000Z",
 						author: {
@@ -160,15 +235,154 @@ describe("TimelineCard", () => {
 						media: [],
 					},
 				}}
+				onReply={onReply}
+			/>,
+		);
+
+		expect(screen.getByText("Original app idea")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+		expect(onReply).toHaveBeenCalledWith("tweet_manual");
+
+		const row = container.querySelector("[data-perf='timeline-card']");
+		if (!row) throw new Error("timeline card missing");
+		fireEvent.click(row);
+		expect(fetchMock).toHaveBeenCalledWith(
+			"/api/conversation?tweetId=tweet_manual",
+		);
+	});
+
+	it("keeps duplicate retweet rows independently expandable", async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				ok: true,
+				anchorId: "tweet_original",
+				items: [
+					{
+						id: "tweet_original",
+						text: "Original conversation",
+						createdAt: "2026-03-08T11:55:00.000Z",
+						replyToId: null,
+						author: item.author,
+						entities: {},
+						media: [],
+					},
+					{
+						id: "tweet_original_reply",
+						text: "Reply in conversation",
+						createdAt: "2026-03-08T11:56:00.000Z",
+						replyToId: "tweet_original",
+						author: item.author,
+						entities: {},
+						media: [],
+					},
+				],
+			}),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const retweetedTweet = {
+			id: "tweet_original",
+			text: "Original app idea",
+			createdAt: "2026-03-08T11:55:00.000Z",
+			author: {
+				id: "profile_3",
+				handle: "ava",
+				displayName: "Ava",
+				bio: "Reporter",
+				followersCount: 400,
+				avatarHue: 120,
+				createdAt: "2026-03-08T09:00:00.000Z",
+			},
+			entities: {},
+			media: [],
+		};
+		const { container } = render(
+			<>
+				<TimelineCard
+					item={{ ...item, id: "tweet_rt_a", retweetedTweet }}
+					onReply={vi.fn()}
+				/>
+				<TimelineCard
+					item={{ ...item, id: "tweet_rt_b", retweetedTweet }}
+					onReply={vi.fn()}
+				/>
+			</>,
+		);
+		const rows = container.querySelectorAll("[data-perf='timeline-card']");
+		const first = rows[0];
+		const second = rows[1];
+		if (!first || !second) throw new Error("timeline cards missing");
+
+		fireEvent.click(first);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			"/api/conversation?tweetId=tweet_original",
+		);
+		expect(
+			within(first as HTMLElement).getByRole("button", {
+				name: "Hide conversation",
+			}),
+		).toHaveAttribute("aria-expanded", "true");
+		expect(
+			within(second as HTMLElement).getByRole("button", {
+				name: "Show conversation",
+			}),
+		).toHaveAttribute("aria-expanded", "false");
+		expect(
+			await screen.findByText("Original conversation"),
+		).toBeInTheDocument();
+	});
+
+	it("keeps link preview cards on native retweets", () => {
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_retweet_link",
+					text: "RT @ava: Original link https://t.co/orig",
+					entities: {},
+					media: [],
+					mediaCount: 0,
+					replyToTweet: null,
+					quotedTweet: null,
+					retweetedTweet: {
+						id: "tweet_original_link",
+						text: "Original link https://t.co/orig",
+						createdAt: "2026-03-08T11:55:00.000Z",
+						author: {
+							id: "profile_3",
+							handle: "ava",
+							displayName: "Ava",
+							bio: "Reporter",
+							followersCount: 400,
+							avatarHue: 120,
+							createdAt: "2026-03-08T09:00:00.000Z",
+						},
+						entities: {
+							urls: [
+								{
+									url: "https://t.co/orig",
+									expandedUrl: "https://example.com/original",
+									displayUrl: "example.com/original",
+									start: 14,
+									end: 31,
+									title: "Original link preview",
+									description: "Preview from original reposted tweet",
+									siteName: "Example",
+								},
+							],
+						},
+						media: [],
+					},
+				}}
 				onReply={vi.fn()}
 			/>,
 		);
 
-		expect(screen.getByText("Sam Altman reposted")).toBeInTheDocument();
-		expect(screen.getByText("Reposted tweet")).toBeInTheDocument();
-		expect(screen.getByText("Original app idea")).toBeInTheDocument();
-		expect(screen.getAllByText("@ava").length).toBeGreaterThan(0);
-		expect(screen.queryByText(/RT @ava/)).not.toBeInTheDocument();
+		expect(screen.getByText("Original link preview")).toBeInTheDocument();
+		expect(
+			document.querySelector("[data-perf='link-preview-card']"),
+		).not.toBeNull();
 	});
 
 	it("renders replied and unbookmarked state", () => {
@@ -476,6 +690,41 @@ describe("TimelineCard", () => {
 			"https://t.co/article",
 		);
 		expect(screen.getByAltText("Article image")).toBeInTheDocument();
+	});
+
+	it("does not render placeholder preview cards for unresolved t.co links", () => {
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_unresolved_link",
+					text: "He can't stop\n\nhttps://t.co/1b11HHQIBA",
+					entities: {
+						urls: [
+							{
+								url: "https://t.co/1b11HHQIBA",
+								expandedUrl: "https://t.co/1b11HHQIBA",
+								displayUrl: "t.co/1b11HHQIBA",
+								start: 15,
+								end: 38,
+							},
+						],
+					},
+					media: [],
+					mediaCount: 0,
+					replyToTweet: null,
+					quotedTweet: null,
+				}}
+				onReply={vi.fn()}
+			/>,
+		);
+
+		expect(
+			screen.getByRole("link", { name: "t.co/1b11HHQIBA" }),
+		).toHaveAttribute("href", "https://t.co/1b11HHQIBA");
+		expect(
+			document.querySelector("[data-perf='link-preview-card']"),
+		).toBeNull();
 	});
 
 	it("tolerates archived media URL entities without display URLs", () => {

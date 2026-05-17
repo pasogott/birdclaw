@@ -673,6 +673,21 @@ describe("birdclaw queries", () => {
 		).run();
 		db.prepare(
 			`
+      insert into tweet_collections (
+        account_id, tweet_id, kind, collected_at, source, raw_json, updated_at
+      ) values
+        (
+          'acct_primary', 'tweet_retweeted_original', 'likes',
+          '2026-03-09T12:02:00.000Z', 'test', '{}', '2026-03-09T12:02:00.000Z'
+        ),
+        (
+          'acct_primary', 'tweet_retweeted_original', 'bookmarks',
+          '2026-03-09T12:02:00.000Z', 'test', '{}', '2026-03-09T12:02:00.000Z'
+        )
+      `,
+		).run();
+		db.prepare(
+			`
       insert into tweets (
         id, account_id, author_profile_id, kind, text, created_at,
         is_replied, reply_to_id, like_count, media_count, bookmarked, liked,
@@ -738,6 +753,32 @@ describe("birdclaw queries", () => {
 		).run();
 		db.prepare(
 			`
+      insert into tweets (
+        id, account_id, author_profile_id, kind, text, created_at,
+        is_replied, reply_to_id, like_count, media_count, bookmarked, liked,
+        entities_json, media_json, quoted_tweet_id
+      ) values (
+        'tweet_retweet_missing_ref', 'acct_primary', 'profile_me', 'home',
+        'RT @Dimillian: Missing original tweet content', '2026-03-09T12:03:00.000Z',
+        0, null, 0, 0, 0, 0, '{}', '[]', null
+      )
+      `,
+		).run();
+		db.prepare(
+			`
+      insert into tweet_account_edges (
+        account_id, tweet_id, kind, first_seen_at, last_seen_at, seen_count,
+        source, raw_json, updated_at
+      ) values (
+        'acct_primary', 'tweet_retweet_missing_ref', 'home', '2026-03-09T12:03:00.000Z',
+        '2026-03-09T12:03:00.000Z', 1, 'test',
+        '{"referenced_tweets":[{"type":"retweeted","id":"tweet_missing_original"}]}',
+        '2026-03-09T12:03:00.000Z'
+      )
+      `,
+		).run();
+		db.prepare(
+			`
       insert into url_expansions (
         short_url, expanded_url, final_url, status, title, description, source, updated_at
       ) values (
@@ -750,13 +791,16 @@ describe("birdclaw queries", () => {
 
 		const items = listTimelineItems({
 			resource: "home",
-			limit: 10,
+			limit: 20,
 		});
 		const rawUrlItem = items.find((item) => item.id === "tweet_raw_url");
 		const rawMentionItem = items.find(
 			(item) => item.id === "tweet_raw_mention",
 		);
 		const retweetItem = items.find((item) => item.id === "tweet_retweet_ref");
+		const missingRetweetItem = items.find(
+			(item) => item.id === "tweet_retweet_missing_ref",
+		);
 		const replyItem = items.find((item) => item.id === "tweet_002");
 		const mediaItem = items.find((item) => item.id === "tweet_003");
 		const quotedItem = items.find((item) => item.id === "tweet_006");
@@ -780,6 +824,21 @@ describe("birdclaw queries", () => {
 		expect(retweetItem?.retweetedTweet).toMatchObject({
 			id: "tweet_retweeted_original",
 			text: "Actual original tweet content",
+			likeCount: 19,
+			mediaCount: 0,
+			bookmarked: true,
+			liked: true,
+			author: {
+				handle: "Dimillian",
+			},
+		});
+		expect(missingRetweetItem?.retweetedTweet).toMatchObject({
+			id: "tweet_retweet_missing_ref:retweeted",
+			text: "Missing original tweet content",
+			likeCount: 0,
+			mediaCount: 0,
+			bookmarked: false,
+			liked: false,
 			author: {
 				handle: "Dimillian",
 			},

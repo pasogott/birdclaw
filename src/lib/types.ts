@@ -127,6 +127,11 @@ export interface EmbeddedTweet {
 	text: string;
 	createdAt: string;
 	replyToId?: string | null;
+	isReplied?: boolean;
+	likeCount?: number;
+	mediaCount?: number;
+	bookmarked?: boolean;
+	liked?: boolean;
 	author: ProfileRecord;
 	entities: TweetEntities;
 	media: TweetMediaItem[];
