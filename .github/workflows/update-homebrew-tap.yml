@@ -19,20 +19,29 @@ jobs:
     steps:
       - name: Resolve release tag
         id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ inputs.tag || github.event.release.tag_name }}"
+          tag="$RELEASE_TAG"
           if [[ -z "$tag" ]]; then
             echo "Missing release tag." >&2
             exit 1
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "request_id=birdclaw-${tag}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          if [[ ! "$tag" =~ ^v[0-9]+[.][0-9]+[.][0-9]+(-[A-Za-z0-9._-]+)?$ ]]; then
+            echo "Invalid release tag: $tag" >&2
+            exit 1
+          fi
+          request_id="birdclaw-${tag}-${GITHUB_RUN_ID}"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          printf 'request_id=%s\n' "$request_id" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch tap update
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          REQUEST_ID: ${{ steps.release.outputs.request_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -40,19 +49,20 @@ jobs:
           gh workflow run update-formula.yml \
             --repo steipete/homebrew-tap \
             -f formula=birdclaw \
-            -f tag="${{ steps.release.outputs.tag }}" \
+            -f tag="$RELEASE_TAG" \
             -f repository=steipete/birdclaw \
             -f artifact_url='https://registry.npmjs.org/{formula}/-/{formula}-{version}.tgz' \
-            -f request_id="${{ steps.release.outputs.request_id }}"
+            -f request_id="$REQUEST_ID"
 
       - name: Wait for tap update
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          REQUEST_ID: ${{ steps.release.outputs.request_id }}
         shell: bash
         run: |
           set -euo pipefail
           for _ in {1..20}; do
-            run_id="$(gh run list --repo steipete/homebrew-tap --workflow update-formula.yml --json databaseId,displayTitle --jq '.[] | select(.displayTitle | contains("${{ steps.release.outputs.request_id }}")) | .databaseId' | head -n1)"
+            run_id="$(gh run list --repo steipete/homebrew-tap --workflow update-formula.yml --json databaseId,displayTitle --jq '.[] | select(.displayTitle | contains(env.REQUEST_ID)) | .databaseId' | head -n1)"
             if [[ -n "$run_id" ]]; then
               gh run watch "$run_id" --repo steipete/homebrew-tap --exit-status
               exit 0
