@@ -337,14 +337,28 @@ async function enrichDmItems(
 }
 
 async function autoUpdateBeforeRead() {
-	const result = await maybeAutoUpdateBackup();
+	let result: Awaited<ReturnType<typeof maybeAutoUpdateBackup>>;
+	try {
+		result = await maybeAutoUpdateBackup();
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(`birdclaw backup auto-sync failed: ${message}`);
+		return;
+	}
 	if (!result.ok) {
 		console.error(`birdclaw backup auto-sync failed: ${result.error}`);
 	}
 }
 
 async function autoSyncAfterWrite() {
-	const result = await maybeAutoSyncBackup();
+	let result: Awaited<ReturnType<typeof maybeAutoSyncBackup>>;
+	try {
+		result = await maybeAutoSyncBackup();
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(`birdclaw backup sync failed: ${message}`);
+		return;
+	}
 	if (!result.ok) {
 		console.error(`birdclaw backup sync failed: ${result.error}`);
 	}

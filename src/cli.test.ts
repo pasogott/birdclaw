@@ -927,6 +927,55 @@ describe("cli", () => {
 		consoleErrorMock.mockRestore();
 	});
 
+	it("keeps read commands usable when backup auto-update throws", async () => {
+		const consoleErrorMock = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		maybeAutoUpdateBackupMock.mockRejectedValue(
+			new Error("database is locked"),
+		);
+		listDmConversationsMock.mockReturnValue([
+			{
+				id: "dm_1",
+				title: "wj",
+				lastMessageAt: "2026-05-20T14:08:53.914Z",
+				lastMessagePreview: "latest message",
+				unreadCount: 0,
+				needsReply: true,
+				influenceScore: 24,
+				influenceLabel: "emerging",
+				participant: {
+					id: "profile_1",
+					handle: "wj66688888",
+					displayName: "wj",
+					followersCount: 0,
+					followingCount: 0,
+					avatarHue: 0,
+				},
+				matches: [],
+			},
+		]);
+		const { runCli } = await loadCli();
+
+		await runCli([
+			"node",
+			"birdclaw",
+			"--json",
+			"search",
+			"dms",
+			"deepseek-v4-flash",
+		]);
+
+		expect(consoleErrorMock).toHaveBeenCalledWith(
+			"birdclaw backup auto-sync failed: database is locked",
+		);
+		expect(listDmConversationsMock).toHaveBeenCalled();
+		expect(consoleLogMock).toHaveBeenCalledWith(
+			expect.stringContaining('"title": "wj"'),
+		);
+		consoleErrorMock.mockRestore();
+	});
+
 	it("hydrates archive profiles and errors when no archive exists", async () => {
 		findArchivesMock.mockResolvedValue([]);
 		const { runCli } = await loadCli();
