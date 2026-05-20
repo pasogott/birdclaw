@@ -53,6 +53,17 @@ function makePreviewMessageId(conversationId: string): string {
 	return `${PREVIEW_MESSAGE_ID_PREFIX}${conversationId}`;
 }
 
+function deleteDmFtsRows(db: Database, messageIds: string[]) {
+	const chunkSize = 500;
+	for (let index = 0; index < messageIds.length; index += chunkSize) {
+		const chunk = messageIds.slice(index, index + chunkSize);
+		if (chunk.length === 0) continue;
+		db.prepare(
+			`delete from dm_fts where message_id in (${chunk.map(() => "?").join(",")})`,
+		).run(...chunk);
+	}
+}
+
 function resolveAccount(db: Database, accountId?: string) {
 	const row = accountId
 		? (db
@@ -379,13 +390,42 @@ function mergeDirectMessagesIntoLocalStore(
       direction = excluded.direction,
       media_count = excluded.media_count
   `);
-	const replaceFts = db.prepare("delete from dm_fts where message_id = ?");
 	const insertFts = db.prepare(
 		"insert into dm_fts (message_id, text) values (?, ?)",
 	);
 	const deleteMessage = db.prepare("delete from dm_messages where id = ?");
+	const ftsMessageIdsToReplace = new Set<string>();
+	for (const conversation of payload.conversations) {
+		const events = eventsByConversation.get(conversation.id) ?? [];
+		if (events.length === 0 && !conversation.lastMessagePreview) {
+			continue;
+		}
+		const participant =
+			conversation.participants.find(
+				(user) =>
+					user.id !== localExternalUserId &&
+					user.username?.toLowerCase() !== accountUsername.toLowerCase(),
+			) ?? conversation.participants[0];
+		if (!participant || !profilesByExternalId.has(participant.id)) {
+			continue;
+		}
+		if (events.length === 0) {
+			ftsMessageIdsToReplace.add(makePreviewMessageId(conversation.id));
+			continue;
+		}
+		ftsMessageIdsToReplace.add(makePreviewMessageId(conversation.id));
+		for (const event of events) {
+			const senderId = event.senderId ?? event.sender?.id;
+			if (senderId && profilesByExternalId.has(senderId)) {
+				ftsMessageIdsToReplace.add(event.id);
+			}
+		}
+	}
 
 	db.transaction(() => {
+		deleteDmFtsRows(db, [...ftsMessageIdsToReplace]);
+		const ftsTextByMessageId = new Map<string, string>();
+
 		for (const conversation of payload.conversations) {
 			const events = eventsByConversation.get(conversation.id) ?? [];
 			if (events.length === 0 && !conversation.lastMessagePreview) {
@@ -442,12 +482,13 @@ function mergeDirectMessagesIntoLocalStore(
 					lastMessageAt,
 					latestInbound ? "inbound" : "outbound",
 				);
-				replaceFts.run(previewMessageId);
-				insertFts.run(previewMessageId, conversation.lastMessagePreview);
+				ftsTextByMessageId.set(
+					previewMessageId,
+					conversation.lastMessagePreview,
+				);
 				continue;
 			}
 
-			replaceFts.run(previewMessageId);
 			deleteMessage.run(previewMessageId);
 
 			for (const event of events) {
@@ -473,9 +514,12 @@ function mergeDirectMessagesIntoLocalStore(
 					toIsoTimestamp(event.createdAt),
 					direction,
 				);
-				replaceFts.run(event.id);
-				insertFts.run(event.id, event.text);
+				ftsTextByMessageId.set(event.id, event.text);
 			}
+		}
+
+		for (const [messageId, text] of ftsTextByMessageId) {
+			insertFts.run(messageId, text);
 		}
 	})();
 }
