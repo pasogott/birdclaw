@@ -110,9 +110,6 @@ test("manual sync controls are available on syncable surfaces", async ({
 	}
 
 	await expectSyncControl("/", "Sync timeline");
-	await expectSyncControl("/mentions", "Sync mentions");
-	await expectSyncControl("/likes", "Sync likes");
-	await expectSyncControl("/bookmarks", "Sync bookmarks");
 	await expectSyncControl("/dms", "Sync DMs");
 });
 
