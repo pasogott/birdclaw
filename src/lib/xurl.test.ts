@@ -861,6 +861,48 @@ describe("xurl transport wrapper", () => {
 		]);
 	});
 
+	it("searches recent tweets through OAuth2 with cursor and time bounds", async () => {
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: AUTH_STATUS_STEIPETE,
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({
+					data: [{ id: "tweet_1", author_id: "42", text: "hello" }],
+					meta: { next_token: "next" },
+				}),
+				stderr: "",
+			});
+		const { searchRecentTweets } = await import("./xurl");
+
+		await expect(
+			searchRecentTweets("Codex from:steipete", {
+				maxResults: 100,
+				paginationToken: "cursor",
+				startTime: "2026-05-23T00:00:00Z",
+				endTime: "2026-05-24T00:00:00Z",
+				username: "steipete",
+				timeoutMs: 1000,
+			}),
+		).resolves.toEqual({
+			data: [{ id: "tweet_1", author_id: "42", text: "hello" }],
+			meta: { next_token: "next" },
+		});
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+			2,
+			"xurl",
+			[
+				"--auth",
+				"oauth2",
+				"--username",
+				"steipete",
+				`/2/tweets/search/recent?query=Codex+from%3Asteipete&max_results=100&expansions=${AUTHOR_MEDIA_EXPANSIONS}&tweet.fields=${THREAD_TWEET_FIELDS}&media.fields=${MEDIA_FIELDS}&user.fields=${RICH_USER_FIELDS}&pagination_token=cursor&start_time=2026-05-23T00%3A00%3A00Z&end_time=2026-05-24T00%3A00%3A00Z`,
+			],
+			expect.objectContaining({ signal: expect.any(Object) }),
+		);
+	});
+
 	it("aborts thread lookups when a timeout is provided", async () => {
 		vi.useFakeTimers();
 		try {
