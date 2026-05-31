@@ -136,6 +136,24 @@ const profileAnalysisContext = {
 			followersCount: 456,
 			avatarUrl: "https://pbs.twimg.com/profile_images/openclaw_normal.jpg",
 		},
+		{
+			id: "2061001416454439313",
+			url: "https://x.com/vincent_koc/status/2061001416454439313",
+			author: "vincent_koc",
+			createdAt: "2026-05-30T10:12:00.000Z",
+			text: "Users ask for support in replies.",
+			likeCount: 3,
+			replyCount: 1,
+			retweetCount: 0,
+			quoteCount: 0,
+			bookmarkedCount: 1,
+			conversationRootId: "2061001416454439313",
+			profileId: "profile_user_99",
+			name: "Vincent Koc",
+			bio: "Builder",
+			followersCount: 789,
+			avatarUrl: "https://pbs.twimg.com/profile_images/vincent_normal.jpg",
+		},
 	],
 	counts: {
 		tweets: 1,
@@ -212,7 +230,7 @@ describe("MarkdownViewer", () => {
 			"href",
 			"https://x.com/steipete/status/2055621934319030779",
 		);
-		expect(screen.getByRole("link", { name: "source" })).toHaveAttribute(
+		expect(screen.getByRole("link", { name: "source 2" })).toHaveAttribute(
 			"href",
 			"https://x.com/openclaw/status/2055858095759229148",
 		);
@@ -322,37 +340,83 @@ describe("MarkdownViewer", () => {
 		expect(screen.queryByRole("link", { name: "source 2" })).toBeNull();
 	});
 
+	it("keeps adjacent mixed unresolved tweet citations visible", () => {
+		render(
+			<MarkdownViewer
+				context={context}
+				markdown={
+					"@kilocode says StepFun is widely used (tweet_2057574939775938900) (tweet_missing)."
+				}
+			/>,
+		);
+
+		expect(screen.queryByText(/tweet_2057574939775938900/)).not.toBeInTheDocument();
+		expect(screen.getByText("(tweet_missing)", { exact: false })).toBeInTheDocument();
+	});
+
 	it("links unresolved numeric citations without leaking raw ids", () => {
 		render(
 			<MarkdownViewer
 				context={profileAnalysisContext}
 				markdown={
-					"People ask for product support inline source (2061001416454439313) source source."
+					"People ask for product support inline source (2069999999999999999) source source."
 				}
 			/>,
 		);
 
-		expect(screen.queryByText(/2061001416454439313/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/2069999999999999999/)).not.toBeInTheDocument();
 		expect(
 			screen.getByRole("link", {
 				name: "People ask for product support inline source",
 			}),
-		).toHaveAttribute("href", "https://x.com/i/status/2061001416454439313");
+		).toHaveAttribute("href", "https://x.com/i/status/2069999999999999999");
 		expect(screen.queryByText(" source source.")).toBeNull();
+	});
+
+	it("groups adjacent numeric profile citations", () => {
+		render(
+			<MarkdownViewer
+				context={profileAnalysisContext}
+				markdown={
+					"Peter describes OpenAI and OpenClaw roles (2055621934319030779) (2055858095759229148) (2061001416454439313)."
+				}
+			/>,
+		);
+
+		expect(screen.queryByText(/2055621934319030779/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/2055858095759229148/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/2061001416454439313/)).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("link", {
+				name: "Peter describes OpenAI and OpenClaw roles",
+			}),
+		).toHaveAttribute(
+			"href",
+			"https://x.com/steipete/status/2055621934319030779",
+		);
+		expect(screen.getByRole("link", { name: "source 2" })).toHaveAttribute(
+			"href",
+			"https://x.com/openclaw/status/2055858095759229148",
+		);
+		expect(screen.getByRole("link", { name: "source 3" })).toHaveAttribute(
+			"href",
+			"https://x.com/vincent_koc/status/2061001416454439313",
+		);
+		expect(screen.queryByRole("link", { name: "source" })).toBeNull();
 	});
 
 	it("links standalone unresolved numeric citations", () => {
 		render(
 			<MarkdownViewer
 				context={profileAnalysisContext}
-				markdown={"**Evidence:** (2061001416454439313)"}
+				markdown={"**Evidence:** (2069999999999999999)"}
 			/>,
 		);
 
-		expect(screen.queryByText(/2061001416454439313/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/2069999999999999999/)).not.toBeInTheDocument();
 		expect(screen.getByRole("link", { name: "source" })).toHaveAttribute(
 			"href",
-			"https://x.com/i/status/2061001416454439313",
+			"https://x.com/i/status/2069999999999999999",
 		);
 	});
 
@@ -387,13 +451,13 @@ describe("MarkdownViewer", () => {
 		render(
 			<MarkdownViewer
 				context={profileAnalysisContext}
-				markdown={"The project is open source (2061001416454439313) source."}
+				markdown={"The project is open source (2069999999999999999) source."}
 			/>,
 		);
 
 		expect(
 			screen.getByRole("link", { name: "The project is open source" }),
-		).toHaveAttribute("href", "https://x.com/i/status/2061001416454439313");
+		).toHaveAttribute("href", "https://x.com/i/status/2069999999999999999");
 		expect(screen.queryByText(" source.")).toBeNull();
 	});
 

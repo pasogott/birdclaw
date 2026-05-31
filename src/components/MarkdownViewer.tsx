@@ -35,6 +35,21 @@ function tweetReferencesFromToken(token: string) {
 		.filter((value) => value.startsWith("tweet_") || /^\d{12,25}$/.test(value));
 }
 
+function adjacentParenthesizedTweetReferences(value: string, cursor: number) {
+	const references: string[] = [];
+	let nextCursor = cursor;
+	while (nextCursor < value.length) {
+		const match =
+			/^\s+\((?:\s*(?:tweet_[A-Za-z0-9_:-]+|\d{12,25})\s*,?)+\)/.exec(
+				value.slice(nextCursor),
+			);
+		if (!match) break;
+		references.push(...tweetReferencesFromToken(match[0]));
+		nextCursor += match[0].length;
+	}
+	return { references, cursor: nextCursor };
+}
+
 function trailingReadableBounds(value: string) {
 	let start = 0;
 	for (const separator of [". ", "? ", "! ", "; ", ": "]) {
@@ -340,7 +355,21 @@ function renderInline(text: string, lookup: InlineLookup) {
 			continue;
 		}
 
-		const references = tweetReferencesFromToken(token);
+		const isParenthesizedTweetRef =
+			token.startsWith("(") && token.endsWith(")");
+		let references = tweetReferencesFromToken(token);
+		if (isParenthesizedTweetRef) {
+			const adjacent = adjacentParenthesizedTweetReferences(text, cursor);
+			const groupedReferences = [...references, ...adjacent.references];
+			if (
+				adjacent.references.length > 0 &&
+				groupedReferences.every((reference) => /^\d{12,25}$/.test(reference))
+			) {
+				references = groupedReferences;
+				cursor = adjacent.cursor;
+				pattern.lastIndex = cursor;
+			}
+		}
 		const resolvedTweets = references.map((reference) =>
 			lookup.tweetsById.get(normalizeTweetReference(reference)),
 		);
@@ -350,8 +379,6 @@ function renderInline(text: string, lookup: InlineLookup) {
 			Boolean(tweet),
 		);
 		const tweet = tweets[0];
-		const isParenthesizedTweetRef =
-			token.startsWith("(") && token.endsWith(")");
 		if (
 			isParenthesizedTweetRef &&
 			references.length > 1 &&
