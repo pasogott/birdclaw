@@ -50,6 +50,7 @@ Stable `--json` envelopes go to stdout, progress and warnings to stderr — pipe
 - **Have a Twitter archive ZIP.** [Archive import](archive.md) walks through autodiscovery, selected re-imports, and idempotent re-runs.
 - **No archive, just want to read live.** [Sync](sync.md) covers likes, bookmarks, timeline, mention threads, and rate-limit-aware resumable runs.
 - **Triaging mentions or DMs.** [Search](search.md), [Mentions](mentions.md), [DMs](dms.md), and [Inbox](inbox.md).
+- **Exploring your network.** [Network Map](network-map.md) plots current followers/following by profile location.
 - **Maintaining a blocklist.** [Moderation](moderation.md) covers blocks, mutes, ban/unban, and bulk imports.
 - **Caching tweet media locally.** [Media](media.md) covers `media fetch` for images, video, and GIFs, plus archive-byte reuse.
 - **Backing up to Git.** [Backup](backup.md) for deterministic JSONL shards and `backup sync` round-trips.

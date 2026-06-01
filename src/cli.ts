@@ -1245,8 +1245,14 @@ program
 	.option("--max-pages <n>", "Maximum profile timeline pages", "100")
 	.option("--max-conversations <n>", "Maximum conversations to backfill", "80")
 	.option("--max-conversation-pages <n>", "Maximum pages per conversation", "3")
-	.option("--conversation-delay-ms <n>", "Delay between conversation search calls")
-	.option("--rate-limit-retry-ms <n>", "Delay before retrying conversation 429s")
+	.option(
+		"--conversation-delay-ms <n>",
+		"Delay between conversation search calls",
+	)
+	.option(
+		"--rate-limit-retry-ms <n>",
+		"Delay before retrying conversation 429s",
+	)
 	.option("--rate-limit-retries <n>", "Conversation 429 retry count")
 	.action(async (handle, options) => {
 		await autoUpdateBeforeRead();
