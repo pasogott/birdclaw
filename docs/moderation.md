@@ -88,7 +88,7 @@ birdclaw unban @amelia --account acct_primary --transport bird --json
 
 `ban` / `unban` are aliases for `blocks add` / `blocks remove` with one extra knob: `--transport`.
 
-- `--transport auto` — try `bird` first, then `xurl`; xweb is not used automatically
+- `--transport auto` — try `bird` first, then verified `xurl`
 - `--transport bird` — force `bird`
 - `--transport xurl` — force `xurl`; verifies through `bird status` before mutating SQLite
 
@@ -110,7 +110,7 @@ Same model as blocks, with one resolution detail: `mute` and `unmute` prefer `bi
 OAuth2 block writes are the most common failure case. Twitter intermittently rejects them with no recoverable error code. For that reason:
 
 - `auto` is the default everywhere
-- xweb helpers remain low-level and are not part of `auto`
+- `auto` stops after the verified `xurl` fallback
 - forced `xurl` writes still verify through `bird status` before sqlite changes
 - failed live writes never leave the local DB in an inconsistent state — either the local row reflects the live state or it is rolled back
 

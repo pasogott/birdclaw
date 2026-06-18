@@ -58,7 +58,7 @@ The Playwright test home is `.playwright-home` in the repo, which is why CI neve
 
 ### `actions.transport`
 
-- `auto` — try `bird` first for block/unblock/mute, then fall back to `xurl`; xweb is not used automatically
+- `auto` — try `bird` first for block/unblock/mute, then fall back to verified `xurl`
 - `bird` — force `bird`
 - `xurl` — force `xurl`; verifies through `bird status` before mutating SQLite
 
@@ -78,19 +78,21 @@ See [Backup](backup.md). When `autoSync` is enabled, read commands pull + merge 
 
 ## Environment variables
 
-| Variable                       | Purpose                                                                                                                                |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `BIRDCLAW_HOME`                | Override the storage root (`~/.birdclaw` by default)                                                                                   |
-| `BIRDCLAW_CONFIG`              | Read and write config at a non-default path                                                                                            |
-| `BIRDCLAW_ACTIONS_TRANSPORT`   | Override moderation action transport with `auto`, `xurl`, or `bird` for one process                                                     |
-| `BIRDCLAW_ALLOWED_HOSTS`       | Comma-separated extra Vite dev-server hostnames for `birdclaw serve` behind a trusted reverse proxy                                    |
-| `BIRDCLAW_LOCAL_WEB`           | Internal `birdclaw serve` marker for direct local-only loopback web APIs; forwarded/proxied requests still require remote-token config |
-| `BIRDCLAW_WEB_TOKEN`           | Optional app-level token for remote web API access; send as `x-birdclaw-token` or `birdclaw_token`                                     |
-| `BIRDCLAW_ALLOW_REMOTE_WEB`    | Set to `1` to allow remote access through a trusted private proxy                                                                      |
-| `BIRDCLAW_DISABLE_LIVE_WRITES` | Set to `1` to block any live mutation (used by tests and CI)                                                                           |
-| `BIRDCLAW_BACKUP_AUTO_SYNC`    | Set to `0` to disable auto-sync for one process                                                                                        |
-| `NO_COLOR`                     | Disable ANSI color in human output                                                                                                     |
-| `OPENAI_API_KEY`               | Enable inbox scoring and low-signal filtering                                                                                          |
+| Variable                       | Purpose                                                                                                                                              |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BIRDCLAW_HOME`                | Override the storage root (`~/.birdclaw` by default)                                                                                                 |
+| `BIRDCLAW_CONFIG`              | Read and write config at a non-default path                                                                                                          |
+| `BIRDCLAW_ACTIONS_TRANSPORT`   | Override moderation action transport with `auto`, `xurl`, or `bird` for one process                                                                  |
+| `BIRDCLAW_HOST`                | Host interface for the production `birdclaw serve` listener; defaults to `127.0.0.1`                                                                 |
+| `BIRDCLAW_PORT`                | Port for the production `birdclaw serve` listener; defaults to `3000`                                                                                |
+| `BIRDCLAW_ALLOWED_HOSTS`       | Comma-separated extra hostnames accepted by the source `pnpm dev` server                                                                             |
+| `BIRDCLAW_LOCAL_WEB`           | Internal local-server mode; production derives local access from the peer socket, while forwarded/proxied requests still require remote-token config |
+| `BIRDCLAW_WEB_TOKEN`           | Optional app-level token for remote web API access; send as `x-birdclaw-token` or `birdclaw_token`                                                   |
+| `BIRDCLAW_ALLOW_REMOTE_WEB`    | Set to `1` to allow remote access through a trusted private proxy                                                                                    |
+| `BIRDCLAW_DISABLE_LIVE_WRITES` | Set to `1` to block any live mutation (used by tests and CI)                                                                                         |
+| `BIRDCLAW_BACKUP_AUTO_SYNC`    | Set to `0` to disable auto-sync for one process                                                                                                      |
+| `NO_COLOR`                     | Disable ANSI color in human output                                                                                                                   |
+| `OPENAI_API_KEY`               | Enable inbox scoring and low-signal filtering                                                                                                        |
 
 `BIRDCLAW_DISABLE_LIVE_WRITES=1` is set automatically in CI and Playwright runs so test code can never publish a tweet, send a DM, or block an account.
 

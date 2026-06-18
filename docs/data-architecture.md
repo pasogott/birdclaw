@@ -37,12 +37,13 @@ Current migrated surfaces:
 - `xurl` command execution, JSON parsing, retry delay, mutation helpers, and public adapter wrappers in `src/lib/xurl.ts`
 - backup export/import/validation, Git repo setup, pull, commit/push, stale auto-update, and auto-sync orchestration in `src/lib/backup.ts`
 - moderation action transport fallback and bird action/profile adapter helpers in `src/lib/actions-transport.ts` and `src/lib/bird-actions.ts`
-- moderation target resolution plus local blocks/mutes write helpers, remote block sync, and x-web block/unblock mutations in `src/lib/moderation-target.ts`, `src/lib/moderation-write.ts`, `src/lib/blocks-write.ts`, `src/lib/blocks.ts`, `src/lib/mutes-write.ts`, and `src/lib/x-web.ts`
+- moderation target resolution, shared local moderation state, thin block/mute wrappers, and remote block sync in `src/lib/moderation-target.ts`, `src/lib/moderation-state.ts`, `src/lib/blocks.ts`, and `src/lib/mutes.ts`
+- canonical profile database-row, prefixed-join, JSON-object, and handle codecs in `src/lib/profile-row.ts` and `src/lib/json-codec.ts`
 - batch blocklist file import in `src/lib/blocklist.ts`
 - authored, mentions, mention-thread sync including xurl recent-search and parent-walk fallback internals, conversation surface, home timeline, saved collection, DM live sync, profile hydration/resolution/affiliation, profile-reply inspection, shared tweet lookup, research and whois report generation, inbox scoring, and follow graph live sync cache/fetch/merge flows in `src/lib/authored-live.ts`, `src/lib/mentions-live.ts`, `src/lib/mention-threads-live.ts`, `src/lib/conversation-surface.ts`, `src/lib/timeline-live.ts`, `src/lib/timeline-collections-live.ts`, `src/lib/dms-live.ts`, `src/lib/profile-hydration.ts`, `src/lib/profile-affiliation-hydration.ts`, `src/lib/profile-resolver.ts`, `src/lib/profile-replies.ts`, `src/lib/tweet-lookup.ts`, `src/lib/research.ts`, `src/lib/whois.ts`, `src/lib/inbox.ts`, and `src/lib/follow-graph.ts`
 - link preview metadata fetches and link-index backfill concurrency in `src/lib/link-preview-metadata.ts` and `src/lib/link-index.ts`
 - `media fetch` archive reuse, HTTP download groups, pacing, and bounded concurrency in `src/lib/media-fetch.ts`
-- archive discovery and archive-import subprocess boundaries in `src/lib/archive-finder.ts` and `src/lib/archive-import.ts`
+- archive discovery plus separated archive reader, slice parser, profile/DM reconciliation, media extraction, and transactional apply boundaries in `src/lib/archive-finder.ts`, `src/lib/archive-import.ts`, and `src/lib/archive/`
 - avatar read-through caching and URL expansion cache/fetch flows in `src/lib/avatar-cache.ts` and `src/lib/url-expansion.ts`
 - OpenAI inbox scoring fetch/parse boundary in `src/lib/openai.ts`
 - scheduled bookmark sync audit logging, overlap locking, backup pass, and launchd install in `src/lib/bookmark-sync-job.ts`
@@ -56,11 +57,6 @@ Support these adapters:
 
 - `xurl`
 - `bird`
-- official API
-
-Optional later:
-
-- lower-level `xweb`
 
 ### Recommendation
 
@@ -69,15 +65,12 @@ v1 transport priority:
 1. `archive`
 2. `xurl`
 3. `bird`
-4. official direct API
-5. optional lower-level `xweb`
 
 Reason:
 
 - working `xurl` already exists
 - users with `xurl` setup get zero-friction sync
 - `bird` can cover GraphQL/cookie-backed gaps if needed
-- official API adapter keeps long-term independence
 
 ### `xurl` compatibility
 
@@ -114,7 +107,7 @@ Treat `bird` the same way:
 import type { Effect } from "effect";
 
 type TransportTask<A, E = TransportError> = Effect.Effect<A, E>;
-type TransportKind = "archive" | "xurl" | "bird" | "official" | "xweb";
+type TransportKind = "archive" | "xurl" | "bird";
 
 interface BirdTransport {
 	kind: TransportKind;
@@ -141,7 +134,7 @@ interface BirdTransport {
 
 Per account:
 
-- preferred transport: `auto | xurl | bird | official | xweb`
+- preferred transport: `auto | xurl | bird`
 - fallback chain
 - capability cache
 - auth status snapshot
@@ -150,12 +143,11 @@ Per account:
 
 - use `xurl` if available and healthy
 - else use `bird` if available and healthy
-- else use official auth if configured
 - else archive-only mode
 
 ## Data Model
 
-SQLite only. Kysely schema in code, migrations checked into repo.
+Native SQLite only. Transactional, append-only migrations define the schema; focused row codecs map repeated query records.
 
 ### Core tables
 
@@ -448,9 +440,8 @@ Candidate ranking inputs:
 
 `birdclaw serve`
 
-- starts local server
-- starts background sync automatically by default
-- opens browser unless `--no-open`
+- starts the built local production server
+- serves SSR routes and compiled static assets
 - exposes sync health and recent job state in the UI
 
 ## Profiles / Accounts
@@ -478,11 +469,6 @@ Options by transport:
 - `bird`
   - birdclaw shells out to `bird` or wraps a narrow stable surface
   - useful for GraphQL/cookie-backed capabilities
-- `official`
-  - birdclaw stores tokens securely
-  - keychain if available, encrypted local store otherwise
-- `xweb`
-  - explicit low-level escape hatch if needed later
 
 ## Package Layout
 
@@ -497,9 +483,7 @@ birdclaw/
     db/
     server/
     transport-bird/
-    transport-official/
     transport-xurl/
-    transport-xweb/
     ui/
   docs/
     spec.md
@@ -516,8 +500,8 @@ birdclaw/
 - `archive`
   - archive parsers and normalizers
 - `db`
-  - Kysely schema
-  - migrations
+  - native SQLite connections
+  - transactional migrations
   - repositories
   - FTS helpers
   - DM influence and replied/unreplied query helpers
@@ -529,10 +513,6 @@ birdclaw/
   - `bird` detection
   - subprocess exec wrappers
   - GraphQL-focused reads/actions
-- `transport-official`
-  - direct Twitter API client
-- `transport-xweb`
-  - optional cookie/graphql mode
 - `server`
   - local app API
   - background sync orchestration

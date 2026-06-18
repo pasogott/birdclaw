@@ -50,12 +50,12 @@ Repo: `steipete/birdclaw`
 - language: TypeScript
 - runtime: Node 25.8.1+ with pnpm workspace
 - database: SQLite
-- query layer: Kysely
+- query layer: native SQLite with focused typed row codecs
 - search: FTS5 day 1
 - UI: React
 - local app shell: TanStack Start
 - import/source priority: archive first when available
-- live transport priority: `xurl` first, `bird` second, official third, experimental `xweb` later
+- live transport priority: `xurl` first, `bird` second
 - product shape: shared core for CLI + local web app
 - multi-account from day 1
 - DM default: `full`
@@ -92,7 +92,7 @@ Repo: `steipete/birdclaw`
 - formatter: `oxfmt`
 - linter: `oxlint`
 - tests: `vitest`
-- migrations: checked-in SQL or Kysely migrator
+- migrations: checked-in, append-only, transactional native SQLite migrations
 
 ### App shell
 
@@ -164,7 +164,7 @@ Do not make `birdclaw` depend on `xurl` or `bird` internals as its core architec
 ## Architecture
 
 ```text
-archive zip / xurl / bird / official API / xweb
+archive zip / xurl / bird
                     ↓
              transport adapters
                     ↓
@@ -300,7 +300,7 @@ Build `birdclaw` as:
 - TypeScript
 - pnpm workspace
 - React + TanStack Start
-- SQLite + Kysely + FTS5
+- native SQLite + FTS5
 - shared multi-account DB in `~/.birdclaw`
 - `xurl` adapter first
 - `bird` and official adapters after that

@@ -727,23 +727,20 @@ Flags:
 ### `serve`
 
 - starts local app server
-- starts background sync automatically by default
-- stdout prints URL in plain mode
+- starts the built production SSR and static-asset server
+- stdout prints the listening URL
 
 Flags:
 
 - `--host <host>`
 - `--port <port>`
-- `--open`
-- `--no-open`
-- `--sync`
-- `--no-sync`
 
-`birdclaw serve` binds the dev server to `127.0.0.1` and enables local
-loopback web APIs without a token. Remote access through a trusted private proxy
-requires `BIRDCLAW_ALLOW_REMOTE_WEB=1`. To require an app-level token too, set
-`BIRDCLAW_WEB_TOKEN` and send it as `x-birdclaw-token` or a `birdclaw_token`
-cookie.
+`birdclaw serve` binds the production server to `127.0.0.1:3000` by default and
+enables local loopback web APIs without a token. `BIRDCLAW_HOST` and
+`BIRDCLAW_PORT` provide environment defaults. Remote access through a trusted
+private proxy requires `BIRDCLAW_ALLOW_REMOTE_WEB=1`. To require an app-level
+token too, set `BIRDCLAW_WEB_TOKEN` and send it as `x-birdclaw-token` or a
+`birdclaw_token` cookie.
 
 ### `graph summary`
 
@@ -826,7 +823,7 @@ birdclaw search tweets --since 2020-01-01 --until 2021-01-01 --originals-only --
 birdclaw search dms "invoice" --participant @someone --min-followers 1000
 birdclaw dms list --unreplied --min-followers 500 --min-influence-score 90 --sort followers
 birdclaw inbox --json
-birdclaw serve --sync
+birdclaw serve
 birdclaw graph events --json
 birdclaw compose reply 1891234567890
 ```

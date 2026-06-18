@@ -80,7 +80,7 @@ Status: WIP. Real and usable. Not done. Expect schema churn, transport gaps, and
 
 ### Runtime Architecture
 
-Birdclaw uses [Effect](https://effect.website/) for new and migrated I/O-heavy internals. The current Effect boundary covers browser API fetches, web sync orchestration, sync-job polling, `bird`/`xurl` subprocess helpers and public adapters, backup export/import/validation and Git orchestration, moderation action transport and target resolution, `bird` action/profile adapters, blocks/mutes write helpers, remote block sync, batch blocklist imports, x-web mutations, authored/mentions/mention-thread sync including xurl recent-search and parent-walk fallback internals, conversation loading, home timeline, saved collection, DM live sync, profile hydration/resolution/affiliation/reply inspection, shared tweet lookup, research and whois report generation, follow graph live sync, link preview/index fetches, archive discovery/import subprocesses, avatar/URL caches, OpenAI/inbox scoring, scheduled bookmark sync locking/audit/launchd install, and the paced/concurrent `media fetch` archive-reuse and HTTP download pipeline.
+Birdclaw uses [Effect](https://effect.website/) for new and migrated I/O-heavy internals. The current Effect boundary covers browser API fetches, web sync orchestration, sync-job polling, `bird`/`xurl` subprocess helpers and public adapters, backup export/import/validation and Git orchestration, moderation action transport and target resolution, `bird` action/profile adapters, blocks/mutes write helpers, remote block sync, batch blocklist imports, authored/mentions/mention-thread sync including xurl recent-search and parent-walk fallback internals, conversation loading, home timeline, saved collection, DM live sync, profile hydration/resolution/affiliation/reply inspection, shared tweet lookup, research and whois report generation, follow graph live sync, link preview/index fetches, archive discovery/import subprocesses, avatar/URL caches, OpenAI/inbox scoring, scheduled bookmark sync locking/audit/launchd install, and the paced/concurrent `media fetch` archive-reuse and HTTP download pipeline.
 
 Public CLI and React call sites still expose plain `Promise` wrappers where that keeps the surrounding framework code simple. New core code should prefer `Effect` programs with typed error values, then add a Promise wrapper only at the outer CLI, route, or component boundary.
 
@@ -267,15 +267,17 @@ Start the app:
 birdclaw serve
 ```
 
-`birdclaw serve` binds the dev server to `127.0.0.1` and enables local
-loopback web APIs without a token. Remote access through a trusted private proxy
-requires `BIRDCLAW_ALLOW_REMOTE_WEB=1`. To require an app-level token too, set
-`BIRDCLAW_WEB_TOKEN` and send it as `x-birdclaw-token` or a `birdclaw_token`
-cookie.
+`birdclaw serve` runs the built production app on `127.0.0.1:3000` and enables
+local loopback web APIs without a token. Override the listener with `--host` and
+`--port`, or `BIRDCLAW_HOST` and `BIRDCLAW_PORT`. Remote access through a trusted
+private proxy requires `BIRDCLAW_ALLOW_REMOTE_WEB=1`. To require an app-level
+token too, set `BIRDCLAW_WEB_TOKEN` and send it as `x-birdclaw-token` or a
+`birdclaw_token` cookie.
 
 Use the Sync button in Home, Mentions, Likes, Bookmarks, or DMs to run the matching live sync from the web UI and then reload the local view. These controls are explicit because live reads can be slow, auth-dependent, or rate-limited.
 
-When running behind a trusted reverse proxy such as Tailscale Serve, add any extra proxy hostnames to `BIRDCLAW_ALLOWED_HOSTS`. The clawmac Tailscale hostname is allowed by default.
+`BIRDCLAW_ALLOWED_HOSTS` applies only to the source `pnpm dev` server, not the
+built server started by `birdclaw serve`.
 
 First moderation pass:
 
@@ -490,7 +492,7 @@ pnpm cli unban @amelia --account acct_primary --transport bird --json
 Notes:
 
 - `ban` / `unban` accept `--transport auto|bird|xurl`
-- `auto` tries `bird` first, then falls back to `xurl`; unverified x-web writes are not used by moderation actions
+- `auto` tries `bird` first, then falls back to verified `xurl`
 - forced `xurl` writes still verify through `bird status` before sqlite changes
 - Twitter still rejects pure OAuth2 block writes, so `auto` is the safe default for block/unblock
 - `blocks import` accepts newline-delimited blocklists with comments and markdown bullets

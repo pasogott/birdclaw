@@ -4,7 +4,15 @@
 
 ### Changed
 
+- Ship compiled CLI and production SSR/static artifacts, remove runtime TypeScript and Vite requirements, and validate installed npm tarballs end to end.
+- Normalize tweet ownership and saved state into account edges and collections, add transactional schema migrations, and preserve older databases and backups through boundary adapters.
+- Consolidate API schemas, NDJSON clients, React Query caches, profile codecs, moderation state, scheduled jobs, and live pagination while deleting superseded runtime paths.
+- Split archive import, portable backup codecs, and CLI command registration into domain-owned modules with shared contract tests.
 - Refresh runtime and development dependencies and resolve esbuild 0.28.1, clearing the active dependency advisory.
+
+### Fixed
+
+- Derive unauthenticated local API access from the production server peer socket so spoofed host headers cannot bypass remote-access controls.
 
 ## 0.8.3 - 2026-06-15
 
