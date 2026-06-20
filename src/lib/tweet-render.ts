@@ -283,18 +283,21 @@ export function enrichFallbackUrlEntities(
 	const existingUrls = entities.urls ?? [];
 	const enrichedExistingUrls = existingUrls.map((entry) => {
 		const expansion = resolveExpansion?.(entry.url);
-		if (!expansion) return entry;
-		const expandedUrl = expansion.expandedUrl || entry.expandedUrl;
+		const expandedUrl =
+			expansion?.expandedUrl || entry.expandedUrl || entry.url;
 		return {
 			...entry,
 			expandedUrl,
-			displayUrl: expansion.displayUrl || displayUrlForLink(expandedUrl),
-			...(expansion.title ? { title: expansion.title } : {}),
+			displayUrl:
+				expansion?.displayUrl ||
+				entry.displayUrl ||
+				displayUrlForLink(expandedUrl),
+			...(expansion?.title ? { title: expansion.title } : {}),
 			...(expansion && "description" in expansion
 				? { description: expansion.description ?? null }
 				: {}),
-			...(expansion.imageUrl ? { imageUrl: expansion.imageUrl } : {}),
-			...(expansion.siteName ? { siteName: expansion.siteName } : {}),
+			...(expansion?.imageUrl ? { imageUrl: expansion.imageUrl } : {}),
+			...(expansion?.siteName ? { siteName: expansion.siteName } : {}),
 		};
 	});
 	const fallbackUrls: TweetUrlEntity[] = [];

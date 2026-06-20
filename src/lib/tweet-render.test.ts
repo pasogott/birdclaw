@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { TweetEntities } from "./types";
 import {
 	enrichFallbackUrlEntities,
 	profileDescriptionEntitiesFromXurl,
@@ -188,5 +189,31 @@ describe("tweet render helpers", () => {
 			imageUrl: "https://peekaboo.sh/social.png",
 			siteName: "Peekaboo",
 		});
+	});
+
+	it("normalizes legacy url entities without expanded fields", () => {
+		const legacyEntities = {
+			urls: [
+				{
+					url: "https://t.co/demo",
+					start: 10,
+					end: 27,
+				},
+			],
+		} as unknown as TweetEntities;
+		const entities = enrichFallbackUrlEntities(
+			"Check it: https://t.co/demo",
+			legacyEntities,
+		);
+
+		expect(entities.urls).toEqual([
+			{
+				url: "https://t.co/demo",
+				expandedUrl: "https://t.co/demo",
+				displayUrl: "t.co/demo",
+				start: 10,
+				end: 27,
+			},
+		]);
 	});
 });

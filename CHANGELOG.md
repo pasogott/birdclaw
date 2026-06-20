@@ -5,6 +5,7 @@
 ### Fixed
 
 - Keep large Likes, Bookmarks, and Today digest reads on indexed tweet lookups instead of blocking the web server with quadratic SQLite scans.
+- Normalize legacy tweet URL entities at the API boundary so saved and quoted tweets remain readable without expanded-link metadata.
 
 ## 0.8.4 - 2026-06-19
 
