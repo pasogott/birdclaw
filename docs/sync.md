@@ -15,6 +15,12 @@ description: "Sync authored tweets, likes, bookmarks, home timeline, mentions, a
 
 On a fresh database, import your X archive before the first live sync. The archive replaces Birdclaw's bundled demo identity with your account identity; transport authentication alone does not perform that binding.
 
+## Web auto-sync
+
+The Home and Mentions lanes keep manual sync as the default and offer an opt-in `Auto sync` control. The interval is stored per sync kind and account in local browser storage, with choices from 5 minutes to 1 hour. Runs use the same `/api/sync` job path as the manual button, never overlap, skip while the page is hidden, show the latest result, and back off exponentially after failures.
+
+Web auto-sync runs only while the page is mounted. For durable unattended refresh with lock files and audit logs, use [`birdclaw jobs`](jobs.md).
+
 ## Common flags
 
 Most `sync *` commands accept:

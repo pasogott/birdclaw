@@ -86,7 +86,7 @@ Open <http://localhost:3000>. The default lanes:
 - **Inbox** — let heuristics or OpenAI float likely-important items
 - **Blocks** — maintain a local-first account-scoped blocklist
 
-Use the Sync button in Home, Mentions, Likes, Bookmarks, or DMs when you want fresh live data. Browser reloads only reread local SQLite; explicit sync avoids surprise live reads and rate-limit spend.
+Use the Sync button in Home, Mentions, Likes, Bookmarks, or DMs when you want fresh live data. Browser reloads only reread local SQLite; explicit sync avoids surprise live reads and rate-limit spend. Home and Mentions can optionally auto-sync per account at 5m, 10m, 15m, 30m, or 1h intervals. The setting stays in this browser, skips hidden-page runs, prevents overlap, and backs off after failures. Use [`birdclaw jobs`](jobs.md) instead when refresh must continue after the page closes.
 
 ## 6. Run real CLI workflows
 
