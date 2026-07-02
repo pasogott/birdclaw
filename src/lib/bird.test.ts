@@ -610,6 +610,74 @@ describe("bird transport wrapper", () => {
 		expectBirdCommandCall(2, ["bookmarks", "-n", "7", "--json-full"]);
 	});
 
+	it("normalizes owned Lists and paged List membership", async () => {
+		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
+		mockBirdStdoutOnce(
+			JSON.stringify([
+				{
+					id: "list_1",
+					name: "Builders",
+					description: "People who build",
+					memberCount: 2,
+					subscriberCount: 3,
+					isPrivate: false,
+					owner: { id: "42", username: "owner", name: "Owner" },
+				},
+			]),
+		);
+		mockBirdStdoutOnce(
+			JSON.stringify({
+				users: [
+					{
+						id: "7",
+						username: "member",
+						name: "Member",
+						followersCount: 50,
+					},
+				],
+				nextCursor: "cursor-next",
+			}),
+		);
+		const { listOwnedXListsViaBird, listXListMembersViaBird } =
+			await import("./bird");
+
+		await expect(
+			listOwnedXListsViaBird({ maxResults: 20 }),
+		).resolves.toMatchObject({
+			data: [
+				{
+					id: "list_1",
+					name: "Builders",
+					memberCount: 2,
+					followerCount: 3,
+					ownerUsername: "owner",
+				},
+			],
+		});
+		await expect(
+			listXListMembersViaBird({
+				listId: "list_1",
+				maxResults: 20,
+				maxPages: 3,
+			}),
+		).resolves.toMatchObject({
+			data: [{ id: "7", username: "member" }],
+			meta: { next_token: "cursor-next", pagination_known_complete: false },
+		});
+		expect(execFileAsyncMock).toHaveBeenCalledTimes(2);
+		expectBirdCommandCall(1, ["lists", "-n", "20", "--json"]);
+		expectBirdCommandCall(2, [
+			"list-members",
+			"list_1",
+			"-n",
+			"20",
+			"--json",
+			"--all",
+			"--max-pages",
+			"3",
+		]);
+	});
+
 	it("maps bird home timeline json into xurl-compatible payloads", async () => {
 		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
 		mockBirdStdoutOnce(
@@ -690,6 +758,7 @@ describe("bird transport wrapper", () => {
 				result_count: 1,
 				page_count: 1,
 				next_token: "cursor-two",
+				pagination_known_complete: false,
 			},
 		});
 		await expect(
@@ -712,6 +781,7 @@ describe("bird transport wrapper", () => {
 				result_count: 1,
 				page_count: 1,
 				next_token: null,
+				pagination_known_complete: true,
 			},
 		});
 		expectBirdCommandCall(1, [

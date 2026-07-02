@@ -490,6 +490,8 @@ const RECENT_TIMELINE_EDGE_CANDIDATES = 5000;
 export function listTimelineItems({
 	resource,
 	account,
+	listAccountId,
+	listId,
 	search,
 	replyFilter = "all",
 	since,
@@ -525,6 +527,7 @@ export function listTimelineItems({
 	const canUseRecentEdgeWindow =
 		!likedOnly &&
 		!bookmarkedOnly &&
+		!listId &&
 		!account &&
 		!search?.trim() &&
 		replyFilter === "all" &&
@@ -639,6 +642,23 @@ export function listTimelineItems({
 			where += " and t.created_at < ?";
 			params.push(until.trim());
 		}
+	}
+
+	if (Boolean(listId) !== Boolean(listAccountId)) {
+		throw new Error("List filtering requires both listId and listAccountId");
+	}
+	if (listId && listAccountId) {
+		where += `
+      and exists (
+        select 1
+        from x_list_members list_member
+        where list_member.account_id = ?
+          and list_member.list_id = ?
+          and list_member.profile_id = t.author_profile_id
+          and list_member.current = 1
+      )
+    `;
+		params.push(listAccountId, listId);
 	}
 
 	const ftsSearch = search?.trim() ? toFtsSearchQuery(search) : "";

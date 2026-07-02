@@ -29,6 +29,8 @@ data/follow_snapshots.jsonl
 data/follow_snapshot_members.jsonl
 data/follow_edges.jsonl
 data/follow_events.jsonl
+data/lists/lists.jsonl
+data/lists/members.jsonl
 ```
 
 Design rules:
@@ -42,6 +44,7 @@ Design rules:
 - **profile snapshots** preserve deduplicated profile-history states for identity evidence over time
 - **profile bio entities** preserve extracted `@handle`, domain, and company-phrase identity hints, including inactive historical values
 - **follow graph** shards preserve followers/following snapshots, snapshot members, current edges, and append-only churn events
+- **X Lists** preserve owned-List freshness/completeness metadata and current/ended member edges
 - **no SQLite WAL/SHM, FTS shadow tables, or transient live cache rows** ever land in the backup
 - **line endings** for hashed JSONL and manifest files stay LF on every platform via the generated `.gitattributes`
 

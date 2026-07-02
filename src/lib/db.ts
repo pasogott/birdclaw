@@ -290,6 +290,43 @@ const BASE_SCHEMA_SQL = `
     snapshot_id text not null
   );
 
+  create table if not exists x_lists (
+    account_id text not null,
+    list_id text not null,
+    name text not null,
+    description text not null default '',
+    owner_profile_id text,
+    owner_external_user_id text,
+    is_private integer not null default 0,
+    member_count integer,
+    follower_count integer,
+    source text not null,
+    membership_status text not null default 'not_synced',
+    lists_synced_at text not null,
+    members_synced_at text,
+    member_page_count integer not null default 0,
+    member_result_count integer not null default 0,
+    rate_limit_json text not null default '{}',
+    raw_json text not null default '{}',
+    updated_at text not null,
+    primary key (account_id, list_id)
+  );
+
+  create table if not exists x_list_members (
+    account_id text not null,
+    list_id text not null,
+    profile_id text not null,
+    external_user_id text not null,
+    source text not null,
+    current integer not null default 1,
+    first_seen_at text not null,
+    last_seen_at text not null,
+    ended_at text,
+    raw_json text not null default '{}',
+    updated_at text not null,
+    primary key (account_id, list_id, profile_id)
+  );
+
   create table if not exists geocoded_locations (
     normalized_key text primary key,
     original text not null,
@@ -363,6 +400,9 @@ const INDEX_SQL = `
   create index if not exists idx_follow_edges_profile on follow_edges(profile_id, current);
   create index if not exists idx_follow_snapshots_account on follow_snapshots(account_id, direction, completed_at desc);
   create index if not exists idx_follow_events_account on follow_events(account_id, direction, kind, event_at desc);
+  create index if not exists idx_x_lists_account_name on x_lists(account_id, name collate nocase, list_id);
+  create index if not exists idx_x_list_members_current on x_list_members(account_id, list_id, current, profile_id);
+  create index if not exists idx_x_list_members_profile on x_list_members(profile_id, current, account_id, list_id);
   create index if not exists idx_geocoded_locations_country on geocoded_locations(country_code);
   create index if not exists idx_geocoded_locations_last_used on geocoded_locations(last_used_at desc);
   create index if not exists idx_geocoded_unresolved_ttl on geocoded_locations_unresolved(ttl_until desc);
@@ -641,6 +681,51 @@ function ensureFollowGraphTables(db: Database) {
 	`);
 }
 
+function ensureXListTables(db: Database) {
+	db.exec(`
+    create table if not exists x_lists (
+      account_id text not null,
+      list_id text not null,
+      name text not null,
+      description text not null default '',
+      owner_profile_id text,
+      owner_external_user_id text,
+      is_private integer not null default 0,
+      member_count integer,
+      follower_count integer,
+      source text not null,
+      membership_status text not null default 'not_synced',
+      lists_synced_at text not null,
+      members_synced_at text,
+      member_page_count integer not null default 0,
+      member_result_count integer not null default 0,
+      rate_limit_json text not null default '{}',
+      raw_json text not null default '{}',
+      updated_at text not null,
+      primary key (account_id, list_id)
+    );
+
+    create table if not exists x_list_members (
+      account_id text not null,
+      list_id text not null,
+      profile_id text not null,
+      external_user_id text not null,
+      source text not null,
+      current integer not null default 1,
+      first_seen_at text not null,
+      last_seen_at text not null,
+      ended_at text,
+      raw_json text not null default '{}',
+      updated_at text not null,
+      primary key (account_id, list_id, profile_id)
+    );
+
+    create index if not exists idx_x_lists_account_name on x_lists(account_id, name collate nocase, list_id);
+    create index if not exists idx_x_list_members_current on x_list_members(account_id, list_id, current, profile_id);
+    create index if not exists idx_x_list_members_profile on x_list_members(profile_id, current, account_id, list_id);
+  `);
+}
+
 function backfillTweetCollections(db: Database) {
 	const missingKinds = (
 		[
@@ -799,6 +884,13 @@ const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
 		version: 2,
 		name: "normalize tweet account and collection state",
 		up: normalizeTweetState,
+	},
+	{
+		version: 3,
+		name: "add durable X List metadata and membership",
+		up: (db) => {
+			ensureXListTables(db);
+		},
 	},
 ];
 

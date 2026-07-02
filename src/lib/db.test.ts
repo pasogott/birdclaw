@@ -335,13 +335,20 @@ describe("database init", () => {
 				"created_at",
 			]),
 		);
+		expect(
+			db
+				.prepare(
+					"select name from sqlite_master where type = 'table' and name in ('x_lists', 'x_list_members') order by name",
+				)
+				.all(),
+		).toEqual([{ name: "x_list_members" }, { name: "x_lists" }]);
 
 		const busyTimeout = db.pragma("busy_timeout", {
 			simple: true,
 		}) as number;
 		expect(busyTimeout).toBe(SQLITE_BUSY_TIMEOUT_MS);
 		expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
-		expect(db.pragma("user_version", { simple: true })).toBe(2);
+		expect(db.pragma("user_version", { simple: true })).toBe(3);
 	});
 
 	it("does not request a write lock for completed startup backfills", async () => {

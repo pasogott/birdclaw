@@ -1,6 +1,6 @@
 ---
 title: Sync
-description: "Sync authored tweets, likes, bookmarks, home timeline, mentions, and mention threads into local SQLite via xurl or bird."
+description: "Sync authored tweets, Lists, likes, bookmarks, home timeline, mentions, and mention threads into local SQLite via xurl or bird."
 ---
 
 # Sync
@@ -89,6 +89,24 @@ birdclaw sync timeline --limit 100 --refresh --json
 ```
 
 `sync timeline` defaults to the chronological feed, not the algorithmic For You. The home timeline is stored in the same `tweets` table so search, filters, and the web UI's `Home` lane all see one set of rows.
+
+## sync lists
+
+Read owned X Lists and bounded membership pages through `bird` first, with `xurl` fallback in `auto` mode:
+
+```bash
+birdclaw sync lists --mode auto --json
+birdclaw sync lists --mode bird --max-lists 20 --member-limit 100 --max-member-pages 3 --delay-ms 1500 --json
+```
+
+Safe defaults are 20 Lists, 20 members per List, one membership page, and a 1,000 ms delay between Lists. Widen the scan only with `--max-member-pages`; there is no unbounded paging flag. Each stored List reports source, List and member sync timestamps, member/page counts, the rate-limit parameters used, and membership state:
+
+- `complete` — the transport returned an exhausted cursor; missing members may be ended
+- `inferred` — returned count matches metadata or a short cursorless page; unseen members are preserved
+- `partial` — a next cursor or page cap remains; unseen members are preserved
+- `error` — latest membership attempt failed; existing edges remain
+
+`birdclaw lists list --json` and `birdclaw lists members <name> --json` inspect only local state. List sync is read-only and never creates or mutates X Lists.
 
 ## sync mentions
 

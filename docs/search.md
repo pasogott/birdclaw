@@ -45,6 +45,15 @@ birdclaw search tweets --bookmarked --hide-low-quality --since 2024-01-01 --limi
 
 `--liked` and `--bookmarked` work uniformly across archive imports and live syncs because both feed the same canonical `tweets` table plus a collection edge.
 
+### List membership filters
+
+```bash
+birdclaw search tweets "sqlite" --list Builders --limit 50 --json
+birdclaw search tweets "local-first" --list-id 1234567890 --json
+```
+
+`--list` matches a cached List name case-insensitively; ambiguous names fail and print the candidate ids. `--list-id` is exact. Both filters are offline: run `birdclaw sync lists` explicitly to refresh membership. `partial` or `inferred` membership remains searchable, but it may omit accounts not reached by the bounded sync.
+
 ### Author filter
 
 ```bash
@@ -56,6 +65,8 @@ birdclaw search tweets "AI" --author @borderline_handle --limit 20 --json
 ### Full flag list
 
 - `--author <handle-or-id>`
+- `--account <accountId>`
+- `--list <name>` / `--list-id <id>`
 - `--since <date>` / `--until <date>`
 - `--originals-only`
 - `--hide-low-quality`

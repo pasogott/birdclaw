@@ -2,6 +2,7 @@ import { backfillLinkIndex, searchLinks } from "#/lib/link-index";
 import { fetchTweetMedia, formatMediaFetchResult } from "#/lib/media-fetch";
 import { listTimelineItems } from "#/lib/queries";
 import { formatWhois, runWhois } from "#/lib/whois";
+import { resolveStoredXListSelector } from "#/lib/x-lists";
 import type { CliCommandContext } from "./command-context";
 import { enrichDmItems, parseDmInboxOption } from "./dm-command-helpers";
 
@@ -39,6 +40,9 @@ export function registerSearchCommands({
 	searchCommand
 		.command("tweets [query]")
 		.option("--resource <resource>", "home, mentions, or authored", "home")
+		.option("--account <accountId>", "Account id")
+		.option("--list <name>", "Only authors in a cached X List")
+		.option("--list-id <id>", "Only authors in a cached X List id")
 		.option("--replied", "Only replied items")
 		.option("--unreplied", "Only unreplied items")
 		.option("--since <date>", "Include tweets created at or after this date")
@@ -60,6 +64,14 @@ export function registerSearchCommands({
 			);
 			if (options.minLikes !== undefined && minLikes === undefined) return;
 			await autoUpdateBeforeRead();
+			const selectedList =
+				options.list || options.listId
+					? resolveStoredXListSelector({
+							account: options.account,
+							name: options.list,
+							listId: options.listId,
+						})
+					: undefined;
 			const replyFilter = options.replied
 				? "replied"
 				: options.unreplied
@@ -73,6 +85,9 @@ export function registerSearchCommands({
 							: options.resource === "authored"
 								? "authored"
 								: "home",
+					account: options.account,
+					listAccountId: selectedList?.accountId,
+					listId: selectedList?.listId,
 					search: query,
 					replyFilter,
 					since: options.since,

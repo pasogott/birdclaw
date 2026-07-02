@@ -13,6 +13,8 @@ import type {
 	XurlMentionUser,
 	XurlReferencedTweet,
 	XurlTweetsResponse,
+	XListPage,
+	XListRecord,
 } from "./types";
 
 const execFileAsync = promisify(execFile);
@@ -144,6 +146,21 @@ type BirdFollowUsersPayload =
 			users?: NonNullable<BirdUserOverviewPayload["user"]>[];
 			nextCursor?: string | null;
 	  };
+
+interface BirdListPayload {
+	id?: string;
+	name?: string;
+	description?: string;
+	memberCount?: number;
+	subscriberCount?: number;
+	isPrivate?: boolean;
+	createdAt?: string;
+	owner?: {
+		id?: string;
+		username?: string;
+		name?: string;
+	};
+}
 
 function toIsoTimestamp(value: string) {
 	const parsed = new Date(value);
@@ -777,7 +794,7 @@ export function listHomeTimelineViaBird(options: {
 
 function normalizeBirdFollowUsers(
 	payload: unknown,
-	command: "followers" | "following",
+	command: "followers" | "following" | "list-members",
 	maxResults: number,
 ): XurlFollowUsersResponse {
 	const rawPayload = payload as BirdFollowUsersPayload;
@@ -793,6 +810,9 @@ function normalizeBirdFollowUsers(
 		!Array.isArray(rawPayload) && typeof rawPayload.nextCursor === "string"
 			? rawPayload.nextCursor
 			: null;
+	const paginationKnownComplete = Array.isArray(rawPayload)
+		? data.length < maxResults
+		: nextToken === null;
 
 	return {
 		data,
@@ -801,13 +821,14 @@ function normalizeBirdFollowUsers(
 			page_count:
 				data.length > 0 ? Math.max(1, Math.ceil(data.length / maxResults)) : 1,
 			next_token: nextToken,
+			pagination_known_complete: paginationKnownComplete,
 		},
 	};
 }
 
 function normalizeBirdFollowUsersEffect(
 	payload: unknown,
-	command: "followers" | "following",
+	command: "followers" | "following" | "list-members",
 	maxResults: number,
 ) {
 	return Effect.try({
@@ -858,6 +879,102 @@ export function listFollowUsersViaBird(options: {
 	maxPages?: number;
 }): Promise<XurlFollowUsersResponse> {
 	return runEffectPromise(listFollowUsersViaBirdEffect(options));
+}
+
+function normalizeBirdLists(payload: unknown): XListPage {
+	if (!Array.isArray(payload)) {
+		throw new Error("bird lists returned unexpected JSON");
+	}
+	const data = payload
+		.map((value): XListRecord | null => {
+			const item = value as BirdListPayload;
+			if (!item.id || !item.name) return null;
+			return {
+				id: item.id,
+				name: item.name,
+				...(item.description ? { description: item.description } : {}),
+				...(typeof item.memberCount === "number"
+					? { memberCount: item.memberCount }
+					: {}),
+				...(typeof item.subscriberCount === "number"
+					? { followerCount: item.subscriberCount }
+					: {}),
+				...(typeof item.isPrivate === "boolean"
+					? { isPrivate: item.isPrivate }
+					: {}),
+				...(item.owner?.id ? { ownerId: item.owner.id } : {}),
+				...(item.owner?.username ? { ownerUsername: item.owner.username } : {}),
+				...(item.owner?.name ? { ownerName: item.owner.name } : {}),
+				...(item.createdAt ? { createdAt: item.createdAt } : {}),
+				raw: value as Record<string, unknown>,
+			};
+		})
+		.filter((item): item is XListRecord => Boolean(item));
+	return { data, meta: { result_count: data.length, next_token: null } };
+}
+
+export function listOwnedXListsViaBirdEffect({
+	maxResults,
+}: {
+	maxResults: number;
+}) {
+	return Effect.gen(function* () {
+		const stdout = yield* runBirdJsonCommandEffect([
+			"lists",
+			"-n",
+			String(maxResults),
+			"--json",
+		]);
+		const payload = yield* parseBirdJsonEffect(stdout);
+		return yield* Effect.try({
+			try: () => normalizeBirdLists(payload),
+			catch: (error) => error,
+		});
+	});
+}
+
+export function listOwnedXListsViaBird(options: { maxResults: number }) {
+	return runEffectPromise(listOwnedXListsViaBirdEffect(options));
+}
+
+export function listXListMembersViaBirdEffect({
+	listId,
+	maxResults,
+	maxPages = 1,
+}: {
+	listId: string;
+	maxResults: number;
+	maxPages?: number;
+}) {
+	return Effect.gen(function* () {
+		const args = ["list-members", listId, "-n", String(maxResults), "--json"];
+		if (maxPages > 1) {
+			args.push("--all", "--max-pages", String(maxPages));
+		}
+		const stdout = yield* runBirdJsonCommandEffect(args);
+		const payload = yield* parseBirdJsonEffect(stdout);
+		const normalized = yield* normalizeBirdFollowUsersEffect(
+			payload,
+			"list-members",
+			maxResults,
+		);
+		if (Array.isArray(payload)) {
+			normalized.meta = {
+				...normalized.meta,
+				pagination_known_complete: false,
+				pagination_inferred_complete: normalized.data.length < maxResults,
+			};
+		}
+		return normalized;
+	});
+}
+
+export function listXListMembersViaBird(options: {
+	listId: string;
+	maxResults: number;
+	maxPages?: number;
+}) {
+	return runEffectPromise(listXListMembersViaBirdEffect(options));
 }
 
 export function listThreadViaBirdEffect({

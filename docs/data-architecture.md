@@ -118,6 +118,8 @@ interface BirdTransport {
 	listMentions(input: CursorInput): TransportTask<Page<TweetRecord>>;
 	listFollowers(input: CursorInput): TransportTask<Page<ProfileRecord>>;
 	listFollowing(input: CursorInput): TransportTask<Page<ProfileRecord>>;
+	listOwnedLists(input: CursorInput): TransportTask<Page<ListRecord>>;
+	listMembers(input: ListMembersInput): TransportTask<Page<ProfileRecord>>;
 	listUserTweets(input: UserTimelineInput): TransportTask<Page<TweetRecord>>;
 	listDmEvents(input: DmEventsInput): TransportTask<Page<DmEventRecord>>;
 	getTweet(id: string): TransportTask<TweetRecord | null>;
@@ -280,6 +282,11 @@ Principles:
   - append-only `started` / `ended`
   - references snapshot/run when available
   - idempotent per account
+- `x_lists`
+  - durable owned-List metadata, source, freshness, bounded-sync parameters, and `complete | inferred | partial | error` membership state
+- `x_list_members`
+  - primary key: `(account_id, list_id, profile_id)`
+  - current/ended membership edges; only cursor-proven complete syncs end unseen members
 
 ### Cache and cost guardrails
 
@@ -326,6 +333,7 @@ Principles:
 - direct messages
 - followers
 - following
+- owned Lists and List membership
 
 ### Import pipeline
 
@@ -372,7 +380,6 @@ Streams:
 Future:
 
 - notifications
-- list timelines
 - graph analytics
 
 ### Sync behavior

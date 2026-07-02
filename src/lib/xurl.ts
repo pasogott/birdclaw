@@ -12,6 +12,8 @@ import type {
 	XurlTweetsResponse,
 	XurlUserTweet,
 	XurlUserTweetsResponse,
+	XListPage,
+	XListRecord,
 } from "./types";
 
 const TRANSPORT_STATUS_TTL_MS = 5 * 60_000;
@@ -703,6 +705,127 @@ export function lookupUsersByIdsEffect(ids: string[]) {
 
 export function lookupUsersByIds(ids: string[]) {
 	return runEffectPromise(lookupUsersByIdsEffect(ids));
+}
+
+function normalizeXListPage(payload: Record<string, unknown>): XListPage {
+	const rawItems = Array.isArray(payload.data) ? payload.data : [];
+	const data = rawItems
+		.map((value): XListRecord | null => {
+			const item = value as Record<string, unknown>;
+			if (typeof item.id !== "string" || typeof item.name !== "string") {
+				return null;
+			}
+			return {
+				id: item.id,
+				name: item.name,
+				...(typeof item.description === "string"
+					? { description: item.description }
+					: {}),
+				...(typeof item.member_count === "number"
+					? { memberCount: item.member_count }
+					: {}),
+				...(typeof item.follower_count === "number"
+					? { followerCount: item.follower_count }
+					: {}),
+				...(typeof item.private === "boolean"
+					? { isPrivate: item.private }
+					: {}),
+				...(typeof item.owner_id === "string"
+					? { ownerId: item.owner_id }
+					: {}),
+				...(typeof item.created_at === "string"
+					? { createdAt: item.created_at }
+					: {}),
+				raw: item,
+			};
+		})
+		.filter((item): item is XListRecord => Boolean(item));
+	const meta =
+		payload.meta && typeof payload.meta === "object"
+			? (payload.meta as Record<string, unknown>)
+			: {};
+	return {
+		data,
+		meta: {
+			result_count: data.length,
+			...(typeof meta.next_token === "string"
+				? { next_token: meta.next_token }
+				: { next_token: null }),
+		},
+	};
+}
+
+export function listOwnedXListsViaXurlEffect({
+	userId,
+	username,
+	maxResults,
+	paginationToken,
+}: {
+	userId: string;
+	username?: string;
+	maxResults: number;
+	paginationToken?: string;
+}) {
+	const query = new URLSearchParams({
+		max_results: String(maxResults),
+		"list.fields":
+			"created_at,description,follower_count,member_count,name,owner_id,private",
+	});
+	if (paginationToken) query.set("pagination_token", paginationToken);
+	return runOAuth2JsonCommandEffect({
+		args: [`/2/users/${userId}/owned_lists?${query.toString()}`],
+		username,
+	}).pipe(Effect.map(normalizeXListPage));
+}
+
+export function listOwnedXListsViaXurl(options: {
+	userId: string;
+	username?: string;
+	maxResults: number;
+	paginationToken?: string;
+}) {
+	return runEffectPromise(listOwnedXListsViaXurlEffect(options));
+}
+
+export function listXListMembersViaXurlEffect({
+	listId,
+	username,
+	maxResults,
+	paginationToken,
+}: {
+	listId: string;
+	username?: string;
+	maxResults: number;
+	paginationToken?: string;
+}) {
+	const query = new URLSearchParams({
+		max_results: String(maxResults),
+		"user.fields": RICH_USER_FIELDS,
+	});
+	if (paginationToken) query.set("pagination_token", paginationToken);
+	return runOAuth2JsonCommandEffect({
+		args: [`/2/lists/${listId}/members?${query.toString()}`],
+		username,
+	}).pipe(
+		Effect.map((payload) => ({
+			data: Array.isArray(payload.data)
+				? (payload.data as XurlMentionUser[])
+				: [],
+			meta:
+				payload.meta && typeof payload.meta === "object"
+					? (payload.meta as Record<string, unknown>)
+					: {},
+		})),
+	);
+}
+
+export function listXListMembersViaXurl(options: {
+	listId: string;
+	username?: string;
+	maxResults: number;
+	paginationToken?: string;
+}) {
+	return runEffectPromise(listXListMembersViaXurlEffect(options));
 }
 
 export function lookupUsersByHandlesEffect(

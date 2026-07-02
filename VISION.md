@@ -28,7 +28,7 @@ A new Twitter surface belongs in Birdclaw when it can provide:
 - resumable sync plus backup/export coverage
 - CLI and structured JSON access before UI-only or downstream integrations
 
-Read-only Lists fit this direction once transport support can enumerate owned Lists and membership with trustworthy completeness markers. Birdclaw should expose the stored List filter and metadata; semantic-index products own their own indexing and query UX.
+Birdclaw owns the read-only List contract: explicit rate-limited sync, durable owned-List metadata and membership edges, freshness/completeness markers, backup coverage, CLI/JSON access, and local lexical filtering. Semantic-index products consume that contract for their own indexing and query UX.
 
 ## Boundaries
 

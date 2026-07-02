@@ -16,6 +16,8 @@ const RICH_USER_FIELDS =
 	"description%2Centities%2Clocation%2Cpublic_metrics%2Cprofile_image_url%2Curl%2Ccreated_at%2Cverified%2Cverified_type";
 const FOLLOW_USER_FIELDS =
 	"id%2Cusername%2Cname%2Cdescription%2Cverified%2Cprotected%2Cpublic_metrics%2Cprofile_image_url%2Ccreated_at";
+const LIST_FIELDS =
+	"created_at%2Cdescription%2Cfollower_count%2Cmember_count%2Cname%2Cowner_id%2Cprivate";
 const AUTHOR_MEDIA_EXPANSIONS = "author_id%2Cattachments.media_keys";
 const MEDIA_EXPANSION = "attachments.media_keys";
 const MEDIA_FIELDS =
@@ -1293,6 +1295,64 @@ describe("xurl transport wrapper", () => {
 			"--auth",
 			"oauth2",
 			`/2/users/25401953/followers?max_results=1000&user.fields=${FOLLOW_USER_FIELDS}&pagination_token=cursor`,
+		]);
+	});
+
+	it("lists owned Lists and List members through OAuth2 endpoints", async () => {
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({
+					data: [
+						{
+							id: "list_1",
+							name: "Builders",
+							member_count: 1,
+							private: false,
+						},
+					],
+					meta: { next_token: "next-list" },
+				}),
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({
+					data: [{ id: "42", username: "sam", name: "Sam" }],
+					meta: { next_token: "next-member" },
+				}),
+				stderr: "",
+			});
+		const { listOwnedXListsViaXurl, listXListMembersViaXurl } =
+			await import("./xurl");
+
+		await expect(
+			listOwnedXListsViaXurl({
+				userId: "25401953",
+				maxResults: 20,
+				paginationToken: "list-cursor",
+			}),
+		).resolves.toMatchObject({
+			data: [{ id: "list_1", name: "Builders", memberCount: 1 }],
+			meta: { next_token: "next-list" },
+		});
+		await expect(
+			listXListMembersViaXurl({
+				listId: "list_1",
+				maxResults: 100,
+				paginationToken: "member-cursor",
+			}),
+		).resolves.toEqual({
+			data: [{ id: "42", username: "sam", name: "Sam" }],
+			meta: { next_token: "next-member" },
+		});
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(1, "xurl", [
+			"--auth",
+			"oauth2",
+			`/2/users/25401953/owned_lists?max_results=20&list.fields=${LIST_FIELDS}&pagination_token=list-cursor`,
+		]);
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(2, "xurl", [
+			"--auth",
+			"oauth2",
+			`/2/lists/list_1/members?max_results=100&user.fields=${RICH_USER_FIELDS}&pagination_token=member-cursor`,
 		]);
 	});
 

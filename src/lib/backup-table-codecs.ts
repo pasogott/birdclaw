@@ -358,6 +358,107 @@ const definitions = {
 			],
 		},
 	},
+	x_lists: {
+		exportSql: `
+      select account_id, list_id, name, description, owner_profile_id,
+        owner_external_user_id, is_private, member_count, follower_count,
+        source, membership_status, lists_synced_at, members_synced_at,
+        member_page_count, member_result_count, rate_limit_json, raw_json,
+        updated_at
+      from x_lists
+      order by account_id, name collate nocase, list_id
+    `,
+		...fixedShard("data/lists/lists.jsonl", "x_lists"),
+		merge: {
+			order: 9,
+			sql: `
+      insert into x_lists (
+        account_id, list_id, name, description, owner_profile_id,
+        owner_external_user_id, is_private, member_count, follower_count,
+        source, membership_status, lists_synced_at, members_synced_at,
+        member_page_count, member_result_count, rate_limit_json, raw_json,
+        updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(account_id, list_id) do update set
+        name = excluded.name,
+        description = excluded.description,
+        owner_profile_id = coalesce(excluded.owner_profile_id, x_lists.owner_profile_id),
+        owner_external_user_id = coalesce(excluded.owner_external_user_id, x_lists.owner_external_user_id),
+        is_private = case when excluded.updated_at >= x_lists.updated_at then excluded.is_private else x_lists.is_private end,
+        member_count = coalesce(excluded.member_count, x_lists.member_count),
+        follower_count = coalesce(excluded.follower_count, x_lists.follower_count),
+        source = case when excluded.updated_at >= x_lists.updated_at then excluded.source else x_lists.source end,
+        membership_status = case when excluded.updated_at >= x_lists.updated_at then excluded.membership_status else x_lists.membership_status end,
+        lists_synced_at = max(x_lists.lists_synced_at, excluded.lists_synced_at),
+        members_synced_at = nullif(max(coalesce(x_lists.members_synced_at, ''), coalesce(excluded.members_synced_at, '')), ''),
+        member_page_count = case when excluded.updated_at >= x_lists.updated_at then excluded.member_page_count else x_lists.member_page_count end,
+        member_result_count = case when excluded.updated_at >= x_lists.updated_at then excluded.member_result_count else x_lists.member_result_count end,
+        rate_limit_json = case when excluded.updated_at >= x_lists.updated_at then excluded.rate_limit_json else x_lists.rate_limit_json end,
+        raw_json = case when excluded.updated_at >= x_lists.updated_at then excluded.raw_json else x_lists.raw_json end,
+        updated_at = max(x_lists.updated_at, excluded.updated_at)
+      `,
+			columns: [
+				"account_id",
+				"list_id",
+				"name",
+				"description",
+				"owner_profile_id",
+				"owner_external_user_id",
+				"is_private",
+				"member_count",
+				"follower_count",
+				"source",
+				"membership_status",
+				"lists_synced_at",
+				"members_synced_at",
+				"member_page_count",
+				"member_result_count",
+				"rate_limit_json",
+				"raw_json",
+				"updated_at",
+			],
+		},
+	},
+	x_list_members: {
+		exportSql: `
+      select account_id, list_id, profile_id, external_user_id, source,
+        current, first_seen_at, last_seen_at, ended_at, raw_json, updated_at
+      from x_list_members
+      order by account_id, list_id, profile_id
+    `,
+		...fixedShard("data/lists/members.jsonl", "x_list_members"),
+		merge: {
+			order: 10,
+			sql: `
+      insert into x_list_members (
+        account_id, list_id, profile_id, external_user_id, source, current,
+        first_seen_at, last_seen_at, ended_at, raw_json, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(account_id, list_id, profile_id) do update set
+        external_user_id = coalesce(nullif(excluded.external_user_id, ''), x_list_members.external_user_id),
+        source = case when excluded.updated_at >= x_list_members.updated_at then excluded.source else x_list_members.source end,
+        current = case when excluded.updated_at >= x_list_members.updated_at then excluded.current else x_list_members.current end,
+        first_seen_at = min(x_list_members.first_seen_at, excluded.first_seen_at),
+        last_seen_at = max(x_list_members.last_seen_at, excluded.last_seen_at),
+        ended_at = case when excluded.updated_at >= x_list_members.updated_at then excluded.ended_at else x_list_members.ended_at end,
+        raw_json = case when excluded.updated_at >= x_list_members.updated_at then excluded.raw_json else x_list_members.raw_json end,
+        updated_at = max(x_list_members.updated_at, excluded.updated_at)
+      `,
+			columns: [
+				"account_id",
+				"list_id",
+				"profile_id",
+				"external_user_id",
+				"source",
+				"current",
+				"first_seen_at",
+				"last_seen_at",
+				"ended_at",
+				"raw_json",
+				"updated_at",
+			],
+		},
+	},
 	tweets: {
 		exportSql: `
       select id, author_profile_id, text, created_at, is_replied, reply_to_id,
@@ -370,7 +471,7 @@ const definitions = {
 		matchesPath: (candidate) => candidate.startsWith("data/tweets/"),
 		countKey: () => "tweets",
 		merge: {
-			order: 9,
+			order: 11,
 			transform: sanitizeImportedTweets,
 			sql: `
       insert into tweets (
@@ -430,7 +531,7 @@ const definitions = {
 		countKey: (candidate) =>
 			`collections_${pathLeaf(candidate).replace(/\.jsonl$/, "") || "unknown"}`,
 		merge: {
-			order: 10,
+			order: 12,
 			sql: `
       insert into tweet_collections (
         account_id, tweet_id, kind, collected_at, source, raw_json, updated_at
@@ -476,7 +577,7 @@ const definitions = {
 		countKey: (candidate) =>
 			`timeline_edges_${pathLeaf(candidate).replace(/\.jsonl$/, "") || "unknown"}`,
 		merge: {
-			order: 11,
+			order: 13,
 			sql: `
       insert into tweet_account_edges (
         account_id, tweet_id, kind, first_seen_at, last_seen_at, seen_count,
@@ -515,7 +616,7 @@ const definitions = {
     `,
 		...fixedShard("data/dms/conversations.jsonl", "dm_conversations"),
 		merge: {
-			order: 12,
+			order: 14,
 			sql: `
       insert into dm_conversations (
         id, account_id, participant_profile_id, title, inbox_kind, last_message_at, unread_count, needs_reply
@@ -558,7 +659,7 @@ const definitions = {
 			candidate !== "data/dms/conversations.jsonl",
 		countKey: () => "dm_messages",
 		merge: {
-			order: 13,
+			order: 15,
 			sql: `
       insert into dm_messages (
         id, conversation_id, sender_profile_id, text, created_at, direction, is_replied, media_count
@@ -599,7 +700,7 @@ const definitions = {
     `,
 		...fixedShard("data/links/url_expansions.jsonl", "url_expansions"),
 		merge: {
-			order: 14,
+			order: 16,
 			transform: sanitizeImportedUrlExpansions,
 			sql: `
       insert into url_expansions (
@@ -647,7 +748,7 @@ const definitions = {
     `,
 		...fixedShard("data/links/occurrences.jsonl", "link_occurrences"),
 		merge: {
-			order: 15,
+			order: 17,
 			sql: `
       insert into link_occurrences (
         source_kind, source_id, source_position, short_url, account_id,
@@ -679,7 +780,7 @@ const definitions = {
     `,
 		...fixedShard("data/moderation/blocks.jsonl", "blocks"),
 		merge: {
-			order: 16,
+			order: 18,
 			sql: `
       insert into blocks (account_id, profile_id, source, created_at)
       values (?, ?, ?, ?)
@@ -698,7 +799,7 @@ const definitions = {
     `,
 		...fixedShard("data/moderation/mutes.jsonl", "mutes"),
 		merge: {
-			order: 17,
+			order: 19,
 			sql: `
       insert into mutes (account_id, profile_id, source, created_at)
       values (?, ?, ?, ?)
@@ -717,7 +818,7 @@ const definitions = {
     `,
 		...fixedShard("data/actions/tweet_actions.jsonl", "tweet_actions"),
 		merge: {
-			order: 18,
+			order: 20,
 			sql: `
       insert into tweet_actions (id, account_id, tweet_id, kind, body, created_at)
       values (?, ?, ?, ?, ?, ?)
@@ -739,7 +840,7 @@ const definitions = {
     `,
 		...fixedShard("data/ai_scores.jsonl", "ai_scores"),
 		merge: {
-			order: 19,
+			order: 21,
 			sql: `
       insert into ai_scores (
         entity_kind, entity_id, model, score, summary, reasoning, updated_at

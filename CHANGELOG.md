@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add explicit, rate-limited owned X List sync through Bird or xurl, durable List/member metadata with completeness state, deterministic backup shards, local List inspection, and `--list` / `--list-id` tweet search filters. (#65)
 - Add opt-in, per-account Home and Mentions auto-sync with persisted intervals, overlap protection, hidden-page pauses, visible status, and failure backoff. (#73 - thanks @Gatsby1s)
 
 ### Changed

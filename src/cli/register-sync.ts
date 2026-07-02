@@ -11,6 +11,7 @@ import {
 	type TimelineCollectionMode,
 } from "#/lib/timeline-collections-live";
 import { syncHomeTimeline } from "#/lib/timeline-live";
+import { syncXLists, type XListSyncMode } from "#/lib/x-lists";
 import { errorMessage, type CliCommandContext } from "./command-context";
 
 export function registerSyncCommands({
@@ -21,6 +22,42 @@ export function registerSyncCommands({
 	const syncCommand = program
 		.command("sync")
 		.description("Refresh live Twitter collections into the local store");
+
+	syncCommand
+		.command("lists")
+		.description("Sync owned X Lists and rate-limited membership pages")
+		.option("--account <accountId>", "Account id")
+		.option("--mode <mode>", "auto, bird, or xurl", "auto")
+		.option("--max-lists <n>", "Maximum owned Lists to inspect", "20")
+		.option("--member-limit <n>", "Members per transport page", "20")
+		.option("--max-member-pages <n>", "Maximum membership pages per List", "1")
+		.option("--delay-ms <n>", "Delay between Lists", "1000")
+		.action(async (options) => {
+			try {
+				const result = await syncXLists({
+					account: options.account,
+					mode: options.mode as XListSyncMode,
+					maxLists: Number(options.maxLists),
+					memberLimit: Number(options.memberLimit),
+					maxMemberPages: Number(options.maxMemberPages),
+					delayMs: Number(options.delayMs),
+				});
+				await autoSyncAfterWrite();
+				print(result, true);
+				if (!result.ok) process.exitCode = 5;
+			} catch (error) {
+				print(
+					{
+						ok: false,
+						kind: "lists",
+						mode: options.mode,
+						error: errorMessage(error),
+					},
+					true,
+				);
+				process.exitCode = 1;
+			}
+		});
 
 	syncCommand
 		.command("timeline")
