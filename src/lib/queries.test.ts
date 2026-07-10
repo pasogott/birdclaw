@@ -641,11 +641,10 @@ describe("birdclaw queries", () => {
 	it("uses a supplied FTS match-count hint without an uncapped count query", () => {
 		setupTempHome();
 		const db = getNativeDb();
+		const preparedSql: string[] = [];
 		const hintedDb = {
 			prepare(sql: string) {
-				if (sql.includes("select count(*) as match_count from tweets_fts")) {
-					throw new Error("unexpected uncapped FTS count");
-				}
+				preparedSql.push(sql.replace(/\s+/gu, " ").trim().toLowerCase());
 				return db.prepare(sql);
 			},
 		} as unknown as TestDatabase;
@@ -657,6 +656,11 @@ describe("birdclaw queries", () => {
 		);
 
 		expect(items.map((item) => item.id)).toContain("tweet_001");
+		expect(
+			preparedSql.some((sql) =>
+				/select count\s*\([^)]*\)\s+as match_count from tweets_fts/u.test(sql),
+			),
+		).toBe(false);
 	});
 
 	it("keeps timeline membership account-scoped for the same canonical tweet", () => {
