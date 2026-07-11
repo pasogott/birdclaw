@@ -112,6 +112,19 @@ describe("bird transport wrapper", () => {
 		).toBe("bash.exe");
 	});
 
+	it("disables MSYS argument conversion for the Windows redirect wrapper", async () => {
+		const { __test__ } = await import("./bird");
+
+		expect(
+			__test__.getBirdStdoutShellEnv("win32", {
+				PATH: "C:\\Windows",
+				MSYS2_ARG_CONV_EXCL: "/legacy",
+			}),
+		).toEqual({ PATH: "C:\\Windows", MSYS2_ARG_CONV_EXCL: "*" });
+		const posixEnv = { PATH: "/usr/bin" };
+		expect(__test__.getBirdStdoutShellEnv("linux", posixEnv)).toBe(posixEnv);
+	});
+
 	it("maps bird mentions json into xurl-compatible payloads", async () => {
 		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
 		mockBirdStdoutOnce(
@@ -441,6 +454,19 @@ describe("bird transport wrapper", () => {
 
 		await expect(listMentionsViaBird({ maxResults: 10 })).rejects.toThrow(
 			"bird command unavailable: /missing/bird",
+		);
+	});
+
+	it("explains how to configure Git Bash when the wrapper shell is missing", async () => {
+		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
+		mockBirdRejectOnce(
+			Object.assign(new Error("spawn bash.exe ENOENT"), { code: "ENOENT" }),
+		);
+
+		const { listMentionsViaBird } = await import("./bird");
+
+		await expect(listMentionsViaBird({ maxResults: 10 })).rejects.toThrow(
+			"Git Bash unavailable: /bin/bash",
 		);
 	});
 
@@ -1108,14 +1134,16 @@ describe("bird transport wrapper", () => {
 			text: "hello\nworld",
 			tab: "a\tb",
 		});
-		expect(__test__.formatBirdCommandError(enoent, "/missing/bird")).toEqual(
+		expect(
+			__test__.formatBirdCommandError(enoent, "/missing/bird", "bash.exe"),
+		).toEqual(
 			expect.objectContaining({
-				message: expect.stringContaining(
-					"bird command unavailable: /missing/bird",
-				),
+				message: expect.stringContaining("Git Bash unavailable: bash.exe"),
 			}),
 		);
-		expect(__test__.formatBirdCommandError("boom", "/tmp/bird")).toBe("boom");
+		expect(
+			__test__.formatBirdCommandError("boom", "/tmp/bird", "/bin/bash"),
+		).toBe("boom");
 		expect(
 			__test__.isUnsupportedBirdOptionError(
 				Object.assign(new Error("bad"), {

@@ -242,7 +242,11 @@ function parseBirdJson(stdout: string) {
 	}
 }
 
-function formatBirdCommandError(error: unknown, birdCommand: string) {
+function formatBirdCommandError(
+	error: unknown,
+	birdCommand: string,
+	shellCommand: string,
+) {
 	const text = [
 		error instanceof Error ? error.message : "",
 		error &&
@@ -259,11 +263,17 @@ function formatBirdCommandError(error: unknown, birdCommand: string) {
 			: "",
 	].join("\n");
 	if (
-		(error instanceof Error &&
-			"code" in error &&
-			(error as { code?: unknown }).code === "ENOENT") ||
-		(/No such file or directory|command not found|cannot execute/i.test(text) &&
-			text.includes(birdCommand))
+		error instanceof Error &&
+		"code" in error &&
+		(error as { code?: unknown }).code === "ENOENT"
+	) {
+		return new Error(
+			`Git Bash unavailable: ${shellCommand}\nInstall Git for Windows, add bash.exe to PATH, or set BIRDCLAW_BASH_COMMAND to its full path.`,
+		);
+	}
+	if (
+		/No such file or directory|command not found|cannot execute/i.test(text) &&
+		text.includes(birdCommand)
 	) {
 		return new Error(
 			`bird command unavailable: ${birdCommand}\nInstall bird on PATH, set BIRDCLAW_BIRD_COMMAND, or update ~/.birdclaw/config.json mentions.birdCommand.`,
@@ -315,6 +325,14 @@ function getBirdStdoutShellCommand(
 	);
 }
 
+function getBirdStdoutShellEnv(
+	platform: NodeJS.Platform = process.platform,
+	env: NodeJS.ProcessEnv = process.env,
+) {
+	if (platform !== "win32") return env;
+	return { ...env, MSYS2_ARG_CONV_EXCL: "*" };
+}
+
 export const runBirdJsonCommandEffect = Effect.fn("bird.runJsonCommand")(
 	(args: string[], timeoutMs?: number) =>
 		Effect.scoped(
@@ -325,10 +343,11 @@ export const runBirdJsonCommandEffect = Effect.fn("bird.runJsonCommand")(
 						error instanceof Error ? error : new Error(String(error)),
 				});
 				const { stdoutPath } = yield* makeBirdStdoutTempEffect();
+				const shellCommand = getBirdStdoutShellCommand();
 				yield* Effect.tryPromise({
 					try: () =>
 						execFileAsync(
-							getBirdStdoutShellCommand(),
+							shellCommand,
 							[
 								"-c",
 								BIRD_STDOUT_REDIRECT_SCRIPT,
@@ -337,9 +356,14 @@ export const runBirdJsonCommandEffect = Effect.fn("bird.runJsonCommand")(
 								birdCommand,
 								...args,
 							],
-							{ maxBuffer: BIRD_JSON_MAX_BUFFER_BYTES, timeout: timeoutMs },
+							{
+								env: getBirdStdoutShellEnv(),
+								maxBuffer: BIRD_JSON_MAX_BUFFER_BYTES,
+								timeout: timeoutMs,
+							},
 						),
-					catch: (error) => formatBirdCommandError(error, birdCommand),
+					catch: (error) =>
+						formatBirdCommandError(error, birdCommand, shellCommand),
 				});
 				return yield* Effect.try({
 					try: () => readFileSync(stdoutPath, "utf8"),
@@ -360,10 +384,11 @@ const runBirdJsonCommandAllowFailureEffect = Effect.fn(
 					error instanceof Error ? error : new Error(String(error)),
 			});
 			const { stdoutPath } = yield* makeBirdStdoutTempEffect();
+			const shellCommand = getBirdStdoutShellCommand();
 			yield* Effect.tryPromise({
 				try: () =>
 					execFileAsync(
-						getBirdStdoutShellCommand(),
+						shellCommand,
 						[
 							"-c",
 							BIRD_STDOUT_REDIRECT_SCRIPT,
@@ -372,13 +397,17 @@ const runBirdJsonCommandAllowFailureEffect = Effect.fn(
 							birdCommand,
 							...args,
 						],
-						{ maxBuffer: BIRD_JSON_MAX_BUFFER_BYTES, timeout: timeoutMs },
+						{
+							env: getBirdStdoutShellEnv(),
+							maxBuffer: BIRD_JSON_MAX_BUFFER_BYTES,
+							timeout: timeoutMs,
+						},
 					).catch((error: unknown) => {
 						const stdout = readFileSync(stdoutPath, "utf8");
 						if (stdout.trim().length > 0) {
 							return { stdout: "", stderr: "" };
 						}
-						throw formatBirdCommandError(error, birdCommand);
+						throw formatBirdCommandError(error, birdCommand, shellCommand);
 					}),
 				catch: (error) => error,
 			});
@@ -1346,6 +1375,7 @@ export const __test__ = {
 	parseBirdJson,
 	formatBirdCommandError,
 	isUnsupportedBirdOptionError,
+	getBirdStdoutShellEnv,
 	getBirdTweetItems,
 	getBirdTweetItem,
 	toMediaEntities,
