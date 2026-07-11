@@ -106,10 +106,17 @@ describe("bird transport wrapper", () => {
 		expect(
 			__test__.getBirdStdoutShellCommand(
 				"win32",
-				{} as NodeJS.ProcessEnv,
+				{ Path: "D:\\PortableGit\\bin;." },
+				(candidate) => candidate === "D:\\PortableGit\\bin\\bash.exe",
+			),
+		).toBe("D:\\PortableGit\\bin\\bash.exe");
+		expect(() =>
+			__test__.getBirdStdoutShellCommand(
+				"win32",
+				{ PATH: ".;relative\\bin" },
 				() => false,
 			),
-		).toBe("bash.exe");
+		).toThrow("Git Bash unavailable: no trusted bash.exe found");
 	});
 
 	it("disables MSYS argument conversion for the Windows redirect wrapper", async () => {

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 as win32Path } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
 import { getBirdCommand } from "./config";
@@ -323,10 +323,21 @@ function getBirdStdoutShellCommand(
 	if (platform !== "win32") {
 		return "/bin/bash";
 	}
-	return (
-		WINDOWS_BASH_COMMAND_CANDIDATES.find((candidate) =>
-			pathExists(candidate),
-		) ?? "bash.exe"
+	const candidate = WINDOWS_BASH_COMMAND_CANDIDATES.find((candidate) =>
+		pathExists(candidate),
+	);
+	if (candidate) return candidate;
+	const pathValue = Object.entries(env).find(
+		([name]) => name.toLowerCase() === "path",
+	)?.[1];
+	for (const rawDirectory of pathValue?.split(";") ?? []) {
+		const directory = rawDirectory.trim().replace(/^"(.*)"$/, "$1");
+		if (!win32Path.isAbsolute(directory)) continue;
+		const pathCandidate = win32Path.join(directory, "bash.exe");
+		if (pathExists(pathCandidate)) return pathCandidate;
+	}
+	throw new Error(
+		"Git Bash unavailable: no trusted bash.exe found\nInstall Git for Windows, add its absolute bin directory to PATH, or set BIRDCLAW_BASH_COMMAND to its full path.",
 	);
 }
 
