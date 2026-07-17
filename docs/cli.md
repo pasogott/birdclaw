@@ -50,7 +50,7 @@ User config:
 ## Command tree
 
 ```text
-birdclaw init
+birdclaw init [--demo]
 birdclaw auth status
 birdclaw auth use <transport>
 birdclaw import archive [path]
@@ -130,9 +130,10 @@ birdclaw debug transport
 ### `init`
 
 - create app dir
-- create DB
+- create an empty DB
 - write default config if absent
-- optionally detect `xurl` and `bird`
+- `--demo` seeds sample tweets, DMs, profiles, and links without authentication or network access
+- print useful next commands for the selected setup path
 
 Account-capable commands accept `--account <username>` or a stored account ID. Set `accounts.default` in `config.json` for a reversible default; an explicit flag wins.
 
@@ -864,6 +865,7 @@ stderr:
 
 ```bash
 birdclaw init
+birdclaw init --demo
 birdclaw auth status
 birdclaw import archive ~/Downloads/twitter-archive.zip --select tweets,directMessages
 birdclaw sync all --transport xurl
