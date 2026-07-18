@@ -142,6 +142,8 @@ export function getQueryEnvelopeEffect({
 	});
 }
 
-export function getQueryEnvelope(): Promise<QueryEnvelope> {
-	return runEffectPromise(getQueryEnvelopeEffect());
+export function getQueryEnvelope(
+	options: { includeArchives?: boolean } = {},
+): Promise<QueryEnvelope> {
+	return runEffectPromise(getQueryEnvelopeEffect(options));
 }

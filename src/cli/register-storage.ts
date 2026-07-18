@@ -20,7 +20,7 @@ export function registerStorageCommands({
 		.description("Show local storage and dataset stats")
 		.action(async () => {
 			await autoUpdateBeforeRead();
-			const meta = await getQueryEnvelope();
+			const meta = await getQueryEnvelope({ includeArchives: false });
 			const paths = getBirdclawPaths();
 			print(
 				{

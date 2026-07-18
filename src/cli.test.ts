@@ -273,7 +273,7 @@ vi.mock("#/lib/authored-live", () => ({
 vi.mock("#/lib/queries", () => ({
 	applyDmRequestMutationToLocalStore: (...args: unknown[]) =>
 		applyDmRequestMutationToLocalStoreMock(...args),
-	getQueryEnvelope: () => getQueryEnvelopeMock(),
+	getQueryEnvelope: (...args: unknown[]) => getQueryEnvelopeMock(...args),
 	listTimelineItems: (...args: unknown[]) => listTimelineItemsMock(...args),
 	listDmConversations: (...args: unknown[]) => listDmConversationsMock(...args),
 	createPost: (...args: unknown[]) => createPostMock(...args),
@@ -656,6 +656,9 @@ describe("cli", () => {
 		expect(consoleLogMock).toHaveBeenCalledWith(
 			expect.stringContaining('"stats"'),
 		);
+		expect(getQueryEnvelopeMock).toHaveBeenCalledWith({
+			includeArchives: false,
+		});
 		expect(runProductionServerMock).toHaveBeenCalledWith({
 			packageRoot: expect.stringContaining("birdclaw"),
 			host: "127.0.0.1",

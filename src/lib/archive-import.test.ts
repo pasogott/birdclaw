@@ -561,7 +561,7 @@ describe("archive import", () => {
 
 		const result = await importArchive(archivePath);
 		const db = getNativeDb();
-		const envelope = await getQueryEnvelope();
+		const envelope = await getQueryEnvelope({ includeArchives: false });
 		const tweets = listTimelineItems({ resource: "home", limit: 10 });
 		const liked = listTimelineItems({ resource: "home", likedOnly: true });
 		const bookmarked = listTimelineItems({
