@@ -12,6 +12,11 @@ import { getNativeDb } from "./db";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import { buildMediaJsonFromIncludes, countTweetMedia } from "./media-includes";
 import type { Database } from "./sqlite";
+import {
+	editHistoryIdsFromPayload,
+	reconcileTweetTombstones,
+	recordTweetRevision,
+} from "./tweet-retention";
 import { readSyncCache, writeSyncCache } from "./sync-cache";
 import { tweetEntitiesFromXurl } from "./tweet-render";
 import type {
@@ -315,6 +320,12 @@ function tweetUrl(handle: string, id: string) {
 
 function replaceTweetFts(db: Database, tweetId: string, text: string) {
 	db.prepare("delete from tweets_fts where tweet_id = ?").run(tweetId);
+	const row = db
+		.prepare("select deleted_at, superseded_at from tweets where id = ?")
+		.get(tweetId) as
+		| { deleted_at: string | null; superseded_at: string | null }
+		| undefined;
+	if (row?.deleted_at || row?.superseded_at) return;
 	db.prepare("insert into tweets_fts (tweet_id, text) values (?, ?)").run(
 		tweetId,
 		text,
@@ -371,12 +382,14 @@ function mergeXurlTweetsIntoLocalStore(
 	);
 	const existingTweet = db.prepare("select text from tweets where id = ?");
 	const seenAt = new Date().toISOString();
+	const touchedTweetIds: string[] = [];
 	db.transaction(() => {
 		for (const tweet of payload.data) {
 			const authorId = tweet.author_id;
 			if (!authorId) continue;
 			const author = usersById.get(authorId);
 			if (!author) continue;
+			touchedTweetIds.push(tweet.id);
 			const profile = upsertProfileFromXUser(db, author);
 			const replyToId =
 				tweet.referenced_tweets?.find((item) => item.type === "replied_to")
@@ -403,6 +416,13 @@ function mergeXurlTweetsIntoLocalStore(
 				buildMediaJsonFromIncludes(tweet, payload.includes?.media),
 				quotedTweetId,
 			);
+			recordTweetRevision(db, {
+				tweetId: tweet.id,
+				editHistoryIds: editHistoryIdsFromPayload(tweet.id, tweet),
+				payloadJson: JSON.stringify(tweet),
+				source,
+				observedAt: seenAt,
+			});
 			upsertTweetAccountEdge(db, {
 				accountId,
 				tweetId: tweet.id,
@@ -413,6 +433,7 @@ function mergeXurlTweetsIntoLocalStore(
 			});
 			refreshTweetFts(db, tweet.id, tweet.text, previousText);
 		}
+		reconcileTweetTombstones(db, touchedTweetIds);
 	})();
 }
 

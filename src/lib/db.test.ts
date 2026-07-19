@@ -189,6 +189,11 @@ describe("database init", () => {
 				"entities_json",
 				"media_json",
 				"quoted_tweet_id",
+				"deleted_at",
+				"deletion_source",
+				"deletion_reason",
+				"superseded_at",
+				"superseded_by_id",
 			]),
 		);
 		expect(columnNames.map((column) => column.name)).not.toEqual(
@@ -250,6 +255,20 @@ describe("database init", () => {
 		expect(replyIndex).toEqual([
 			expect.objectContaining({ name: "reply_to_id" }),
 		]);
+		expect(
+			db
+				.prepare(
+					"select count(*) as count from tweet_revisions where revision_id in ('legacy_saved_home', 'legacy_authored', 'legacy_search')",
+				)
+				.get(),
+		).toEqual({ count: 3 });
+		expect(
+			db
+				.prepare(
+					"select count(*) as count from tweets where deleted_at is not null",
+				)
+				.get(),
+		).toEqual({ count: 0 });
 
 		const syncCacheColumnNames = db
 			.prepare("pragma table_info(sync_cache)")
@@ -399,7 +418,53 @@ describe("database init", () => {
 		}) as number;
 		expect(busyTimeout).toBe(SQLITE_BUSY_TIMEOUT_MS);
 		expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
-		expect(db.pragma("user_version", { simple: true })).toBe(5);
+		expect(db.pragma("user_version", { simple: true })).toBe(7);
+	});
+
+	it("adds revision edges without rewriting v6 revision rows", () => {
+		const tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-db-"));
+		tempDirs.push(tempDir);
+		process.env.BIRDCLAW_HOME = tempDir;
+
+		const db = getNativeDb({ seedDemoData: false });
+		db.exec(`
+			insert into tweet_revisions (
+				root_tweet_id, revision_id, revision_index, payload_json, source, observed_at
+			) values
+				('legacy-root', 'legacy-root', 0, null, 'migration', '2026-01-01T00:00:00.000Z'),
+				('legacy-root', 'legacy-left', 1, null, 'migration', '2026-01-02T00:00:00.000Z'),
+				('legacy-root', 'legacy-right', 1, null, 'migration', '2026-01-02T00:00:00.000Z'),
+				('legacy-root', 'legacy-final', 2, null, 'migration', '2026-01-03T00:00:00.000Z');
+			drop table tweet_revision_edges;
+			pragma user_version = 6;
+		`);
+		resetDatabaseForTests();
+
+		const migrated = getNativeDb({ seedDemoData: false });
+		expect(migrated.pragma("user_version", { simple: true })).toBe(7);
+		expect(
+			migrated
+				.prepare(
+					"select revision_id, revision_index from tweet_revisions where root_tweet_id = 'legacy-root' order by revision_index, revision_id",
+				)
+				.all(),
+		).toEqual([
+			{ revision_id: "legacy-root", revision_index: 0 },
+			{ revision_id: "legacy-left", revision_index: 1 },
+			{ revision_id: "legacy-right", revision_index: 1 },
+			{ revision_id: "legacy-final", revision_index: 2 },
+		]);
+		expect(
+			migrated
+				.prepare(
+					"select older_revision_id, newer_revision_id from tweet_revision_edges order by older_revision_id, newer_revision_id",
+				)
+				.all(),
+		).toEqual([
+			{ older_revision_id: "legacy-left", newer_revision_id: "legacy-final" },
+			{ older_revision_id: "legacy-root", newer_revision_id: "legacy-left" },
+			{ older_revision_id: "legacy-root", newer_revision_id: "legacy-right" },
+		]);
 	});
 
 	it("does not request a write lock for completed startup backfills", async () => {
@@ -484,7 +549,7 @@ describe("database init", () => {
 
 	it.each([
 		{ kind: "stale", version: 4 },
-		{ kind: "future", version: 6 },
+		{ kind: "future", version: 8 },
 	])(
 		"rejects a $kind schema and closes its provisional reader",
 		({ version }) => {
@@ -519,10 +584,10 @@ describe("database init", () => {
 
 		const writer = getNativeDb({ seedDemoData: false });
 		getReadDb({ seedDemoData: false });
-		writer.pragma("user_version = 6");
+		writer.pragma("user_version = 8");
 
 		expect(() => getStrictReadDb()).toThrow(
-			/schema 6 is not ready for version 5/,
+			/schema 8 is not ready for version 7/,
 		);
 	});
 
