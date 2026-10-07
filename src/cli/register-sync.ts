@@ -140,9 +140,9 @@ export function registerSyncCommands({
 
 	syncCommand
 		.command("authored")
-		.description("Refresh authenticated authored tweets through xurl")
+		.description("Refresh authenticated authored tweets through xurl or bird")
 		.option("--account <username>", "Account username or id")
-		.option("--mode <mode>", "xurl", "xurl")
+		.option("--mode <mode>", "auto, bird, or xurl", "auto")
 		.option("--limit <n>", "X API page size", "100")
 		.option("--max-pages <n>", "Stop after N pages and resume later")
 		.option("--since-id <tweetId>", "Override the stored since_id cursor")
@@ -168,7 +168,7 @@ export function registerSyncCommands({
 					{
 						ok: false,
 						kind: "authored",
-						source: "xurl",
+						mode: options.mode,
 						error: errorMessage(error),
 					},
 					true,
@@ -184,7 +184,7 @@ export function registerSyncCommands({
 			"Fetch tweet conversation context for recent mentions through bird or xurl",
 		)
 		.option("--account <username>", "Account username or id")
-		.option("--mode <mode>", "bird or xurl", "xurl")
+		.option("--mode <mode>", "auto, bird, or xurl", "auto")
 		.option("--limit <n>", "Recent mentions to inspect", "30")
 		.option("--delay-ms <n>", "Delay between thread fetches", "1500")
 		.option("--timeout-ms <n>", "Per-thread timeout", "15000")

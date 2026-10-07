@@ -10,6 +10,7 @@ const getDefaultAccountSelectorMock = vi.fn();
 const resolveOperationAccountMock = vi.fn();
 const resolveMentionsDataSourceMock = vi.fn();
 const setActionsTransportMock = vi.fn();
+const setPreferredTransportMock = vi.fn();
 const getQueryEnvelopeMock = vi.fn();
 const getNativeDbMock = vi.fn();
 const seedDemoDataMock = vi.fn();
@@ -119,6 +120,15 @@ vi.mock("#/lib/config", () => ({
 	ensureBirdclawDirs: () => ensureBirdclawDirsMock(),
 	getDefaultAccountSelector: () => getDefaultAccountSelectorMock(),
 	getBirdclawConfig: () => ({}),
+	getPreferredTransport: () => undefined,
+	defaultLiveSyncMode: (mode: string) => mode,
+	autoTransportCacheSuffix: () => "",
+	getAutoTransportOrder: (primary = "xurl") => [
+		primary,
+		primary === "bird" ? "xurl" : "bird",
+	],
+	setPreferredTransport: (...args: unknown[]) =>
+		setPreferredTransportMock(...args),
 	getBirdclawPaths: () => getBirdclawPathsMock(),
 	resolveMentionsDataSource: (...args: unknown[]) =>
 		resolveMentionsDataSourceMock(...args),
@@ -395,6 +405,7 @@ describe("cli", () => {
 		resolveOperationAccountMock.mockReset();
 		resolveMentionsDataSourceMock.mockReset();
 		setActionsTransportMock.mockReset();
+		setPreferredTransportMock.mockReset();
 		getQueryEnvelopeMock.mockReset();
 		getNativeDbMock.mockReset();
 		seedDemoDataMock.mockReset();
@@ -984,6 +995,14 @@ describe("cli", () => {
 		expect(consoleLogMock).toHaveBeenCalledWith(
 			expect.stringContaining('"transport": "xurl"'),
 		);
+	});
+
+	it("sets the global auto transport preference", async () => {
+		setPreferredTransportMock.mockReturnValue({ preferred: "bird" });
+		const { runCli } = await loadCli();
+		await runCli(["node", "birdclaw", "--json", "auth", "prefer", "bird"]);
+		expect(setPreferredTransportMock).toHaveBeenCalledWith("bird");
+		expect(setActionsTransportMock).not.toHaveBeenCalled();
 	});
 
 	it("rejects unsupported auth transports", async () => {
